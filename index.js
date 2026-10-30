@@ -64,7 +64,7 @@ bot.onText(/\/random/, async (msg) => {
     message += `Holder: ${shortHolder}\n`;
     message += `${await getTribeLine(nft.tokenId)}\n\n`;
 
-    const publicTraits = nft.attributes.filter(attr => !/^(?:(?:gem\\s+)?affinity|tribe|allegiance)$/i.test(String(attr.trait_type || attr.name || '').trim()));
+    const publicTraits = nft.attributes.filter(attr => !/^(?:(?:gem\s+)?affinity|tribe|allegiance)$/i.test(String(attr.trait_type || attr.name || '').trim()));
     const traits = nftService.formatTraits(publicTraits);
     if (traits !== 'Not available') {
       message += `*Properties:*\n${traits}\n\n`;
@@ -143,7 +143,7 @@ bot.onText(/\/showID (.+)/, async (msg, match) => {
     message += `Holder: ${shortHolder}\n`;
     message += `${await getTribeLine(nft.tokenId)}\n\n`;
 
-    const publicTraits = nft.attributes.filter(attr => !/^(?:(?:gem\\s+)?affinity|tribe|allegiance)$/i.test(String(attr.trait_type || attr.name || '').trim()));
+    const publicTraits = nft.attributes.filter(attr => !/^(?:(?:gem\s+)?affinity|tribe|allegiance)$/i.test(String(attr.trait_type || attr.name || '').trim()));
     const traits = nftService.formatTraits(publicTraits);
     if (traits !== 'Not available') {
       message += `*Properties:*\n${traits}\n\n`;
