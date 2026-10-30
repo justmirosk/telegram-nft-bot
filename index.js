@@ -1,6 +1,7 @@
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const NFTService = require('./nftService');
+const { getTribeLine, detailUrl } = require('./tribeService');
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const contractAddress = process.env.NFT_CONTRACT_ADDRESS;
@@ -60,9 +61,11 @@ bot.onText(/\/random/, async (msg) => {
     }
     message += `NFT #${displayNumber}\n`;
     message += `Token ID: ${nft.tokenId}\n`;
-    message += `Holder: ${shortHolder}\n\n`;
+    message += `Holder: ${shortHolder}\n`;
+    message += `${await getTribeLine(nft.tokenId)}\n\n`;
 
-    const traits = nftService.formatTraits(nft.attributes);
+    const publicTraits = nft.attributes.filter(attr => !/^(?:(?:gem\s+)?affinity|tribe|allegiance)$/i.test(String(attr.trait_type || attr.name || '').trim()));
+    const traits = nftService.formatTraits(publicTraits);
     if (traits !== 'Not available') {
       message += `*Properties:*\n${traits}\n\n`;
     }
@@ -73,6 +76,7 @@ bot.onText(/\/random/, async (msg) => {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
+          [{ text: 'View on BeaniScrolls', url: detailUrl(nft.tokenId) }],
           [
             {
               text: 'OKX',
@@ -136,9 +140,11 @@ bot.onText(/\/showID (.+)/, async (msg, match) => {
     }
     message += `NFT #${userInput}\n`;
     message += `Token ID: ${nft.tokenId}\n`;
-    message += `Holder: ${shortHolder}\n\n`;
+    message += `Holder: ${shortHolder}\n`;
+    message += `${await getTribeLine(nft.tokenId)}\n\n`;
 
-    const traits = nftService.formatTraits(nft.attributes);
+    const publicTraits = nft.attributes.filter(attr => !/^(?:(?:gem\s+)?affinity|tribe|allegiance)$/i.test(String(attr.trait_type || attr.name || '').trim()));
+    const traits = nftService.formatTraits(publicTraits);
     if (traits !== 'Not available') {
       message += `*Properties:*\n${traits}\n\n`;
     }
@@ -149,6 +155,7 @@ bot.onText(/\/showID (.+)/, async (msg, match) => {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
+          [{ text: 'View on BeaniScrolls', url: detailUrl(nft.tokenId) }],
           [
             {
               text: 'OKX',
@@ -178,7 +185,7 @@ bot.onText(/\/showID (.+)/, async (msg, match) => {
       await bot.sendMessage(chatId, message, options);
     }
   } catch (error) {
-    console.error(`Error in /showID command for token ${tokenId}:`, error);
+    console.error(`Error in /showID command for NFT ${nftNumber}:`, error);
     bot.sendMessage(chatId, `Error: ${error.message}`);
   }
 });
