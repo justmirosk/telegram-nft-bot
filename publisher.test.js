@@ -21,16 +21,22 @@ test('publisher authenticates, restricts destinations, sends images and persists
     assert.equal((await post({ ...data, text: 'a'.repeat(4097) })).status, 400);
     assert.equal((await post(data)).status, 200);
     assert.equal((await post(data)).status, 200); assert.equal(calls, 1);
+    assert.equal((await post({ text: 'Hello', destination: 'frens', request_id: data.request_id })).status, 200);
+    assert.equal(calls, 1);
     assert.equal((await post({ ...data, text: 'Changed' })).status, 409);
     await new Promise(r => server.close(r));
     server = startPublisher(bot, env); await once(server, 'listening');
     assert.equal((await post(data)).status, 200); assert.equal(calls, 1);
     const image = Buffer.from([137,80,78,71,13,10,26,10]).toString('base64');
     assert.equal((await post({ ...data, request_id: 'test-photo-001', image_base64: image })).status, 200);
+    const large = Buffer.alloc(4 * 1024 * 1024);
+    Buffer.from([137,80,78,71,13,10,26,10]).copy(large);
+    assert.equal((await post({ ...data, request_id: 'test-large-001', image_base64: large.toString('base64') })).status, 200);
+    assert.equal((await post({ ...data, request_id: 'test-bad-001', image_base64: '====' })).status, 400);
     bot.sendMessage = async () => { calls++; throw Error('timeout'); };
     const uncertain = { ...data, request_id: 'test-timeout-001' };
     assert.equal((await post(uncertain)).status, 502);
-    assert.equal((await post(uncertain)).status, 409); assert.equal(calls, 3);
+    assert.equal((await post(uncertain)).status, 409); assert.equal(calls, 4);
   } finally { await new Promise(r => server.close(r)); fs.rmSync(dir, { recursive: true }); }
 });
 test('disabled by default and rejects incomplete configuration', () => {

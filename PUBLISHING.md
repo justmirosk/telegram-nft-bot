@@ -53,23 +53,71 @@ Check the actual group before creating a new ID. Never automatically retry an
 uncertain delivery with a new ID. Back up the persistent volume; receipts must
 not be deleted while old request IDs might be retried. Keep one service replica.
 
-## Connecting ChatGPT
+## Connecting ChatGPT privately
 
-This API is the bot side of the integration. This chat currently has no Telegram
-or general authenticated HTTP action tool. Deploying this change alone does not
-make `/publish` callable from this chat. A supported custom action/connector or
-MCP adapter must expose the publish operation to the chat and securely supply
-the bearer secret. The HTTP endpoint itself is not an MCP server. Do not claim
-end-to-end posting works until that connection and a live test are verified.
+The same authenticated listener now serves a stateless Streamable HTTP MCP
+endpoint at `/mcp`, using the official MCP SDK. It creates no additional bot,
+poller, server listener or Railway service. The existing `/publish` contract
+is preserved. Both routes share validation and persistent delivery receipts.
 
-A publishing client should show the completed text, image and destination before
-sending, publish only upon the user's instruction, reuse request IDs for retries,
-and report the returned receipt. Creating or editing a draft is not authorization
-to send it.
+MCP tools:
+- `list_destinations`: read approved aliases without sending.
+- `get_publish_receipt`: read a receipt by request ID without sending.
+- `publish_announcement`: send approved text/PNG/JPEG bytes, with
+  `user_instructed_publish: true` required. This is declared a write action
+  (`readOnlyHint: false`, `destructiveHint: true`, `openWorldHint: true`).
+
+The caller's boolean cannot independently prove human approval. The private
+plugin skill requires explicit user instruction for each final announcement.
+Use the host's ask-for-approval permission for the publishing tool. Never enable
+automatic publishing based on drafting, graphic generation or group content.
+
+Authentication is `Authorization: Bearer <PUBLISH_API_KEY>`. The private plugin
+declares API-key authentication so the host stores the credential separately.
+Never use the Telegram bot token as the publishing key. Never put either token
+in chat, the package, logs, a repository or URL parameters. This bearer key grants
+access to all configured destinations: keep the plugin private and rotate the
+key in both Railway and host connection storage if exposed.
+
+MCP browser requests with an Origin header are denied by default. If a verified
+host requires one, set `PUBLISH_ALLOWED_ORIGINS` to exact comma-separated HTTPS
+origins; never use a wildcard. Server-to-server requests without Origin work.
+
+### Finish connection
+
+1. Configure the existing service as described above: persistent volume, random
+   publishing secret, verified destination aliases and group/topic IDs, one
+   replica, and HTTPS public networking. Set a consistent listener/domain port.
+   Do not change or replace the existing Telegram bot token.
+2. Deploy this branch through the existing repository/service. Verify a terminal
+   successful deployment, unauthenticated `/mcp` returns 401, then authenticated
+   MCP initialization and tool discovery. Do not call the send tool to test auth.
+3. The private package source is in
+   `plugins/minibeany-telegram-publisher/`. With the publishing key supplied
+   through a secure environment, run:
+   `python3 package-publishing-plugin.py https://<verified-service-host>/mcp`.
+   This only initializes and lists tools, then writes a private plugin ZIP with
+   the verified endpoint and API-key auth declaration, never the secret.
+4. Save that archive using Plugin Creator's `create_plugin` when available,
+   install the returned private plugin, and enter the publishing key through the
+   host's credential UI. Do not claim connection complete until its tools appear.
+5. List destination aliases and inspect receipts read-only. Only after the user
+   explicitly instructs a particular test post should any live send be attempted.
+
+Image inputs are exact PNG/JPEG bytes in `image_base64`. No server-side URL
+fetching or local filesystem paths are accepted. The current MCP adapter does
+not implement ChatGPT attachment/file-resolution Extensions. A host capable of
+passing exact image bytes can send graphics; an attachment-only host needs that
+additional file-transfer capability before image publishing can be claimed.
+
+The service remains disabled unless `PUBLISH_ENABLED=true`. Startup,
+initialization, tool discovery, read-only receipt checks and packaging send no
+Telegram messages.
 
 ## Verification
 
 `npm test` uses a fake Telegram client, local HTTP requests and temporary receipt
 storage. It exercises missing authentication, disallowed destinations, text
-limits, image handling, idempotency across restart, payload conflicts, ambiguous
+limits, image handling, idempotency across restart, reordered JSON fields, 4 MiB uploads, MCP discovery and tool calls, explicit-send
+argument validation, payload conflicts, ambiguous
 delivery errors, and disabled/incomplete configuration. No test contacts Telegram.
