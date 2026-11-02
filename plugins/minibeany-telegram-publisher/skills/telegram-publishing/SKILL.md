@@ -4,8 +4,9 @@ description: Prepare or publish announcements through the existing MiniBeany Tel
 ---
 
 Use the connected MiniBeany publisher tools. Never request the Telegram bot token
-or publishing API key in chat; authentication belongs in the connection's secret
-storage. Never invoke arbitrary HTTP or another bot as a fallback.
+or publishing API key in chat. Browser connections authenticate through GitHub
+OAuth and an explicit publisher consent screen; only the configured owner can
+connect. Never invoke arbitrary HTTP or another bot as a fallback.
 
 Before sending, list configured destinations and resolve the intended alias.
 Show the exact final text, selected graphic and destination for review. Drafting,

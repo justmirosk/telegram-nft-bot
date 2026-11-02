@@ -11,7 +11,9 @@ function createMcpHandler({ destinations, dir, publish }) {
       res.writeHead(405, { Allow: 'POST', 'Cache-Control': 'no-store' });
       return res.end();
     }
-    const server = new McpServer({ name: 'minibeany-telegram-publisher', version: '0.1.0' });
+    const server = new McpServer({ name: 'minibeany-telegram-publisher', version: '0.2.0' }, {
+      instructions: 'Publish only when the user explicitly instructs sending the final text and graphic to the selected destination. Drafting, editing, connecting and testing do not authorize a send. List destinations first. Keep the same request ID and payload on retries. On uncertain delivery check the receipt and Telegram; never automatically use a new ID. No startup or connection test should publish a message.',
+    });
     const result = (data, isError = false) => ({ content: [{ type: 'text', text: JSON.stringify(data) }], isError });
     const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
     server.registerTool('list_destinations', {

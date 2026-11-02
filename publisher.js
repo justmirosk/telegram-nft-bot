@@ -66,14 +66,28 @@ function startPublisher(bot, env = process.env) {
   return reply(200, receipt);
   };
   const handleMcp = require('./publishingMcp').createMcpHandler({ destinations, dir, publish, env });
+  const oauth = require('./publishingOAuth').createPublishingOAuth(env, destinations);
   const server = http.createServer(async (req, res) => {
     const reply = (status, data) => {
       res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(data));
     };
     if (req.method === 'GET' && req.url === '/health') return reply(200, { ok: true });
+    const pathname = new URL(req.url, 'http://localhost').pathname;
+    if (oauth && (pathname.startsWith('/.well-known/') || ['/authorize', '/token', '/revoke', '/oauth/github/callback', '/oauth/consent'].includes(pathname))) {
+      return oauth.app(req, res, () => reply(404, { error: 'Not found' }));
+    }
     const supplied = crypto.createHash('sha256').update(req.headers.authorization || '').digest();
-    if (!crypto.timingSafeEqual(secretHash, supplied)) return reply(401, { error: 'Unauthorized' });
+    if (oauth && pathname === '/mcp') {
+      try {
+        const bearer = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(req.headers.authorization || '');
+        if (!bearer) throw Error();
+        await oauth.provider.verifyAccessToken(bearer[1]);
+      } catch {
+        res.setHeader('WWW-Authenticate', `Bearer resource_metadata="${oauth.metadataUrl}", scope="publish:telegram"`);
+        return reply(401, { error: 'OAuth authorization required' });
+      }
+    } else if (!crypto.timingSafeEqual(secretHash, supplied)) return reply(401, { error: 'Unauthorized' });
     if (req.url === '/mcp' && req.headers.origin &&
         !String(env.PUBLISH_ALLOWED_ORIGINS || '').split(',').includes(req.headers.origin)) return reply(403, { error: 'Origin not allowed' });
     if (req.url === '/mcp' && req.method !== 'POST') return handleMcp(req, res);
