@@ -1,9 +1,11 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "minibeany-telegram-publisher",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Privately publish explicitly approved text and graphics through Miro's existing MiniBeany Telegram bot.",
-  "author": { "name": "Miro Faltinek" },
+  "author": {
+    "name": "Miro Faltinek"
+  },
   "extensions": {
     "com.openai": {
       "interface": {

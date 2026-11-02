@@ -121,3 +121,55 @@ storage. It exercises missing authentication, disallowed destinations, text
 limits, image handling, idempotency across restart, reordered JSON fields, 4 MiB uploads, MCP discovery and tool calls, explicit-send
 argument validation, payload conflicts, ambiguous
 delivery errors, and disabled/incomplete configuration. No test contacts Telegram.
+
+## Browser-compatible GitHub OAuth (v0.2)
+
+The optional OAuth upgrade runs in the same existing bot process/listener.
+It is disabled by default, preserving the deployed API-key connection until
+the GitHub application has been registered. When enabled, /mcp accepts only
+publisher OAuth access tokens; the API key remains restricted to /publish.
+ChatGPT never receives the GitHub app secret or a GitHub access token.
+
+Create a GitHub OAuth application with:
+- Application name: MiniBeany Telegram Publisher
+- Homepage: https://zealous-optimism-production-5324.up.railway.app
+- Authorization callback:
+  https://zealous-optimism-production-5324.up.railway.app/oauth/github/callback
+- Device flow: leave disabled.
+
+Enter the GitHub client ID and generated client secret directly in the existing
+Railway service variables as GITHUB_OAUTH_CLIENT_ID and
+GITHUB_OAUTH_CLIENT_SECRET. Do not paste the secret into chat or GitHub source.
+Then configure PUBLISH_PUBLIC_URL to the HTTPS origin above,
+PUBLISH_GITHUB_USER_ID=198136300 (verified owner justmirosk), and
+PUBLISH_OAUTH_ENABLED=true. Keep the existing receipt volume and one replica.
+
+The GitHub app requests no repository scope. It fetches /user only to compare
+the permanent ID. The temporary GitHub token is discarded, and the browser
+shows a separate publisher consent screen. Completing connection never sends
+a Telegram message.
+
+The MCP authorization server uses the official SDK with a statically registered
+public client:
+- client ID: minibeany-chatgpt
+- token endpoint authentication: none (S256 PKCE is mandatory)
+- ChatGPT callback: https://chatgpt.com/connector_platform_oauth_redirect
+- scope: publish:telegram
+- metadata: /.well-known/oauth-authorization-server
+- protected resource metadata: /.well-known/oauth-protected-resource/mcp
+
+It advertises RFC 9207 issuer identification and includes the issuer on
+authorization responses. Both OAuth legs use PKCE. Upstream GitHub state and
+publisher consent are one-time, short-lived and bound to an HttpOnly Secure
+SameSite=Lax browser cookie. Publisher access tokens last one hour; refresh
+tokens rotate and grant lifetimes are limited to thirty days. Revocation
+invalidates the whole grant. Codes and raw access/refresh tokens are not stored;
+receipt-volume OAuth records use hashed filenames and owner-only permissions.
+GitHub tokens and the app secret are not written to this state directory.
+
+After activation, verify metadata, the unauthenticated 401 challenge and the
+full sign-in flow. Package the plugin using --oauth and create it privately
+through Plugin Creator. Select OAuth with the provided public client ID above,
+not the GitHub client ID. Use the GitHub app credentials only in Railway.
+Authenticated live discovery remains pending until the owner completes Connect.
+Do not call publish_announcement as an authentication test.
