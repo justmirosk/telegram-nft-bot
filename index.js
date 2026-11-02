@@ -21,6 +21,9 @@ if (!contractAddress || contractAddress === '0x_your_nft_contract_address_here')
 const bot = new TelegramBot(token, { polling: true });
 const nftService = new NFTService(rpcUrl, contractAddress);
 
+// Optional publisher shares the existing bot and polling process.
+require('./publisher').startPublisher(bot);
+
 console.log('Telegram NFT Bot is running...');
 
 bot.onText(/\/start/, async (msg) => {
