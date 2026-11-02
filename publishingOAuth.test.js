@@ -62,10 +62,12 @@ test('GitHub-backed OAuth: owner restriction, browser binding, consent, PKCE, ro
     assert.match(begin.response.headers.get('set-cookie'), /Secure/);
     assert.equal((await callback(begin, 'wrong-cookie')).status, 400); assert.equal(upstreamCalls, 0);
     const page = await callback(begin); assert.equal(page.status, 200);
+    assert.equal(page.headers.get('referrer-policy'), 'origin');
     assert(page.headers.get('content-security-policy').includes("form-action 'self' " + REDIRECT_URI));
     const transaction = (await page.text()).match(/name="transaction" value="([^"]+)"/)[1];
     assert.equal((await callback(begin)).status, 400);
     assert.equal((await consent(transaction, begin.cookie, 'allow', 'https://evil.example')).status, 400);
+    assert.equal((await consent(transaction, begin.cookie, 'allow', 'null')).status, 400);
     const approved = await consent(transaction, begin.cookie);
     assert.equal(approved.status, 302);
     const redirect = new URL(approved.headers.get('location'));
