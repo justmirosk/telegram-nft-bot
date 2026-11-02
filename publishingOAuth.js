@@ -119,7 +119,7 @@ function createPublishingOAuth(env, destinations, fetcher = fetch) {
     },
   };
   const app = express(); app.disable('x-powered-by');
-  app.use((req, res, next) => { res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer',
+  app.use((req, res, next) => { res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'origin',
     'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': `default-src 'none'; form-action 'self' ${REDIRECT_URI}; frame-ancestors 'none'; base-uri 'none'` }); next(); });
   const options = { provider, issuerUrl: origin, resourceServerUrl: new URL(resource), scopesSupported: [SCOPE] };
   app.get('/.well-known/oauth-authorization-server', (req, res) => res.json({ ...createOAuthMetadata(options),
