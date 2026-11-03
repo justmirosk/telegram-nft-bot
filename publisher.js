@@ -19,8 +19,16 @@ function startPublisher(bot, env = process.env) {
   }
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const secretHash = crypto.createHash('sha256').update(`Bearer ${key}`).digest();
+  const uploads = require('./imageUploads').createImageUploads(dir);
   const publish = async (input, reply) => {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return reply(400, { error: 'Invalid request' });
+  if (input.image_upload_id !== undefined) {
+    if (input.image_base64 !== undefined) return reply(400, { error: 'Choose one image source' });
+    try {
+      const { image_upload_id, ...rest } = input;
+      input = { ...rest, image_base64: uploads.read(image_upload_id).toString('base64') };
+    } catch (error) { return reply(400, { error: error.message }); }
+  }
   const { request_id: id, destination, text, image_base64: encoded } = input;
   if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(id) ||
       typeof destination !== 'string' || !Object.hasOwn(destinations, destination) ||
@@ -50,12 +58,14 @@ function startPublisher(bot, env = process.env) {
   }
   const target = destinations[destination];
   const options = target.message_thread_id ? { message_thread_id: target.message_thread_id } : {};
+  console.info(JSON.stringify({ event: 'publish_started', request_id: id, destination, image_bytes: image?.length || 0 }));
   let sent;
   try {
     sent = image
       ? await bot.sendPhoto(target.chat_id, image, { ...options, caption: text }, { filename: mime === 'image/png' ? 'announcement.png' : 'announcement.jpg', contentType: mime })
       : await bot.sendMessage(target.chat_id, text, options);
-  } catch {
+  } catch (error) {
+    console.warn(JSON.stringify({ event: 'publish_delivery_uncertain', request_id: id, code: String(error.code || 'UNKNOWN'), telegram_error_code: error.response?.body?.error_code }));
     // Keep pending: Telegram may have accepted a request before a network timeout.
     return reply(502, { request_id: id, status: 'pending', error: 'Delivery uncertain; check Telegram before retrying with a new ID' });
   }
@@ -63,9 +73,10 @@ function startPublisher(bot, env = process.env) {
   const temp = `${file}.tmp`;
   fs.writeFileSync(temp, JSON.stringify(receipt), { mode: 0o600 });
   fs.renameSync(temp, file);
+  console.info(JSON.stringify({ event: 'publish_sent', request_id: id, message_id: receipt.message_id }));
   return reply(200, receipt);
   };
-  const handleMcp = require('./publishingMcp').createMcpHandler({ destinations, dir, publish, env });
+  const handleMcp = require('./publishingMcp').createMcpHandler({ destinations, dir, publish, uploads, env });
   const oauth = require('./publishingOAuth').createPublishingOAuth(env, destinations);
   const server = http.createServer(async (req, res) => {
     const reply = (status, data) => {
@@ -84,7 +95,7 @@ function startPublisher(bot, env = process.env) {
         if (!bearer) throw Error();
         await oauth.provider.verifyAccessToken(bearer[1]);
       } catch {
-        res.setHeader('WWW-Authenticate', `Bearer resource_metadata="${oauth.metadataUrl}", scope="publish:telegram"`);
+        res.setHeader('WWW-Authenticate', `Bearer resource_metadata="${oauth.metadataUrl}", scope="publish:telegram"${req.headers.authorization ? ', error="invalid_token"' : ''}`);
         return reply(401, { error: 'OAuth authorization required' });
       }
     } else if (!crypto.timingSafeEqual(secretHash, supplied)) return reply(401, { error: 'Unauthorized' });

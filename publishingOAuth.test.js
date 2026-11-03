@@ -41,7 +41,7 @@ test('GitHub-backed OAuth: owner restriction, browser binding, consent, PKCE, ro
   const consent = async (transaction, cookie, decision = 'allow', origin = env.PUBLISH_PUBLIC_URL) => fetch(`${base}/oauth/consent`, {
     method: 'POST', redirect: 'manual', headers: { Origin: origin, Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ transaction, decision }) });
-  const token = async params => fetch(`${base}/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: CLIENT_ID, ...params }) });
+  const token = async params => fetch(`${base}/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Forwarded-For': '192.0.2.5' }, body: new URLSearchParams({ client_id: CLIENT_ID, ...params }) });
   try {
     const meta = await (await fetch(`${base}/.well-known/oauth-authorization-server`)).json();
     assert.equal(meta.authorization_response_iss_parameter_supported, true);
@@ -90,11 +90,13 @@ test('GitHub-backed OAuth: owner restriction, browser binding, consent, PKCE, ro
       const endpoint = `http://127.0.0.1:${publishing.address().port}/mcp`;
       const anonymous = await fetch(endpoint); assert.equal(anonymous.status, 401);
       assert.match(anonymous.headers.get('www-authenticate'), /oauth-protected-resource/);
-      assert.equal((await fetch(endpoint, { headers: { Authorization: 'Bearer ' + 'a'.repeat(64) } })).status, 401);
+      const invalid = await fetch(endpoint, { headers: { Authorization: 'Bearer ' + 'a'.repeat(64) } });
+      assert.equal(invalid.status, 401);
+      assert.match(invalid.headers.get('www-authenticate'), /error="invalid_token"/);
       const listed = await fetch(endpoint, { method: 'POST', headers: { Authorization: 'Bearer ' + issuedTokens.access_token,
         'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) });
-      assert.equal(listed.status, 200); assert.equal((await listed.json()).result.tools.length, 3);
+      assert.equal(listed.status, 200); assert.equal((await listed.json()).result.tools.length, 4);
       assert.equal(sends, 0);
     } finally { await new Promise(r => publishing.close(r)); }
     assert.equal((await oauth.provider.verifyAccessToken(issuedTokens.access_token)).clientId, CLIENT_ID);

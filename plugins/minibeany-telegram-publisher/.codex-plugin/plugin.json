@@ -1,0 +1,22 @@
+{
+  "interface": {
+    "capabilities": [],
+    "category": "Communication",
+    "defaultPrompt": "Help me prepare a Telegram announcement for review. Publish only when I explicitly ask.",
+    "developerName": "Miro Faltinek",
+    "displayName": "MiniBeany Telegram Publisher",
+    "longDescription": "Publish final approved announcements to configured Telegram groups using the existing MiniBeany bot. Supports plain text, PNG/JPEG uploads and persistent delivery receipts. Never send without an explicit user instruction.",
+    "shortDescription": "Approved Telegram publishing"
+  },
+  "requires_local_executor": false,
+  "name": "minibeany-telegram-publisher",
+  "version": "0.2.2",
+  "description": "Privately publish explicitly approved text and graphics through Miro's existing MiniBeany Telegram bot.",
+  "author": {
+    "name": "Miro Faltinek",
+    "email": "justbode@gmail.com"
+  },
+  "keywords": [],
+  "skills": "./skills",
+  "mcpServers": "./.mcp.json"
+}
