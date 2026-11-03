@@ -30,7 +30,15 @@ transfer limitation instead of repeatedly attempting a multi-megabyte tool call.
 
 Photo posts must have
 at most 1024 Unicode code points of caption. Text-only posts allow 4096 code
-points. Text is plain text; do not promise Telegram Markdown formatting. Do not
+points. Optional formatting markers are supported in both text posts and photo captions:
+[h] starts a bold heading, [p] switches to normal text, and [i] switches to italic.
+Each style continues until the next marker. Markers are removed, each new marked
+section starts a paragraph, and blank lines within sections are preserved.
+Unmarked text is sent literally. Never convert these markers to raw HTML or
+Telegram Markdown yourself; send the exact approved marker text. The server
+escapes HTML characters and handles formatting. Limits apply to displayed text,
+including paragraph spacing, after markers are removed. For review, show the
+rendered appearance and retain the exact marker source for publishing and retries. Do not
 split a post, change the image or publish to extra groups without instruction.
 If this host cannot supply exact image bytes, stop the image send and explain the
 missing file-transfer capability. Do not invent bytes, URLs or image success.

@@ -10,7 +10,7 @@
   },
   "requires_local_executor": false,
   "name": "minibeany-telegram-publisher",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Privately publish explicitly approved text and graphics through Miro's existing MiniBeany Telegram bot.",
   "author": {
     "name": "Miro Faltinek",
