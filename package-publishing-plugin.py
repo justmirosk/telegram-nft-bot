@@ -62,7 +62,7 @@ if oauth_mode:
 else:
     rpc('initialize', {'protocolVersion': '2025-03-26', 'capabilities': {}, 'clientInfo': {'name': 'private-plugin-packager', 'version': '0.1.0'}}, 1)
     tools = rpc('tools/list', {}, 2)['tools']
-    if {tool['name'] for tool in tools} != {'list_destinations', 'get_publish_receipt', 'publish_announcement'}:
+    if {tool['name'] for tool in tools} != {'list_destinations', 'get_publish_receipt', 'publish_announcement', 'upload_image_chunk'}:
         raise SystemExit('Unexpected MCP tools; inspect the service before packaging')
     send = next(tool for tool in tools if tool['name'] == 'publish_announcement')
     if send.get('annotations', {}).get('readOnlyHint') is not False:
@@ -84,7 +84,9 @@ with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as output:
         if file.is_file():
             output.writestr(str(file.relative_to(source)), file.read_bytes())
     output.writestr('mcp.json', json.dumps(config, indent=2) + '\n')
+    legacy_config = {'mcpServers': config['mcpServers']}
+    output.writestr('.mcp.json', json.dumps(legacy_config, indent=2) + '\n')
 with zipfile.ZipFile(archive) as output:
-    assert set(output.namelist()) == {'plugin.json', 'mcp.json', 'skills/telegram-publishing/SKILL.md'}
+    assert set(output.namelist()) == {'plugin.json', '.codex-plugin/plugin.json', 'mcp.json', '.mcp.json', 'skills/telegram-publishing/SKILL.md'}
     assert output.testzip() is None
 print('Verified OAuth metadata and 401 challenge; owner sign-in pending. Created' if oauth_mode else 'Verified read-only MCP discovery; created', archive)

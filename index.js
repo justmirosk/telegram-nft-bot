@@ -18,7 +18,7 @@ if (!contractAddress || contractAddress === '0x_your_nft_contract_address_here')
   process.exit(1);
 }
 
-const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(token, { polling: true, request: { timeout: 30000 } });
 const nftService = new NFTService(rpcUrl, contractAddress);
 
 // Optional publisher shares the existing bot and polling process.

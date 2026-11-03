@@ -173,3 +173,24 @@ through Plugin Creator. Select OAuth with the provided public client ID above,
 not the GitHub client ID. Use the GitHub app credentials only in Railway.
 Authenticated live discovery remains pending until the owner completes Connect.
 Do not call publish_announcement as an authentication test.
+
+
+### Photo transport and troubleshooting
+
+For ChatGPT photo posts, stage exact file bytes with `upload_image_chunk` using
+262144 base64 characters per chunk (last may be shorter), a unique upload ID,
+zero-based index, total chunk count and SHA-256 of the complete decoded file.
+Encode and call tools programmatically; never transcribe base64 through the model.
+Staging never sends anything. Require `status: ready`, then publish with
+`image_upload_id` and the existing explicit user instruction. The caption limit
+is still 1024 Unicode code points and images are limited to 5 MiB. Staged images
+expire after 24 hours. Identical chunk retries are safe; different bytes under
+the same upload ID fail. Inline `image_base64` remains compatible.
+
+Publishing logs contain request ID, destination alias, image byte count and
+result, but never image bytes, message text, tokens or API keys. A Telegram
+request times out after 30 seconds and retains a pending receipt because
+delivery may have happened. Check receipts rather than creating a new send.
+An invalid/expired bearer token receives an OAuth `invalid_token` challenge;
+anonymous discovery requests may normally receive 401. Railway's immediate
+reverse proxy is trusted for OAuth endpoint rate limiting.

@@ -1,22 +1,24 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "minibeany-telegram-publisher",
-  "version": "0.2.0",
-  "description": "Privately publish explicitly approved text and graphics through Miro's existing MiniBeany Telegram bot.",
   "author": {
+    "email": "justbode@gmail.com",
     "name": "Miro Faltinek"
   },
+  "description": "Privately publish explicitly approved text and graphics through Miro's existing MiniBeany Telegram bot.",
   "extensions": {
     "com.openai": {
       "interface": {
-        "displayName": "MiniBeany Telegram Publisher",
-        "shortDescription": "Approved Telegram publishing",
-        "longDescription": "Publish final approved announcements to configured Telegram groups using the existing MiniBeany bot. Supports plain text, PNG/JPEG uploads and persistent delivery receipts. Never send without an explicit user instruction.",
-        "developerName": "Miro Faltinek",
-        "category": "Communication",
         "capabilities": [],
-        "defaultPrompt": "Help me prepare a Telegram announcement for review. Publish only when I explicitly ask."
-      }
+        "category": "Communication",
+        "defaultPrompt": "Help me prepare a Telegram announcement for review. Publish only when I explicitly ask.",
+        "developerName": "Miro Faltinek",
+        "displayName": "MiniBeany Telegram Publisher",
+        "longDescription": "Publish final approved announcements to configured Telegram groups using the existing MiniBeany bot. Supports plain text, PNG/JPEG uploads and persistent delivery receipts. Never send without an explicit user instruction.",
+        "shortDescription": "Approved Telegram publishing"
+      },
+      "requires_local_executor": false
     }
-  }
+  },
+  "name": "minibeany-telegram-publisher",
+  "version": "0.2.2"
 }
