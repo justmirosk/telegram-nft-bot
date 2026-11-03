@@ -194,3 +194,21 @@ delivery may have happened. Check receipts rather than creating a new send.
 An invalid/expired bearer token receives an OAuth `invalid_token` challenge;
 anonymous discovery requests may normally receive 401. Railway's immediate
 reverse proxy is trusted for OAuth endpoint rate limiting.
+
+
+### Announcement text formatting
+
+`[h]` starts a **bold heading**, `[p]` switches to normal text, and `[i]`
+switches to *italic*. Styles continue until the next marker. Markers are removed;
+each marked section starts a paragraph and blank lines inside sections remain.
+The same syntax works in photo captions and text-only posts. Unmarked posts
+remain literal. HTML characters are escaped; user HTML is never executed as
+formatting. Telegram limits apply to the rendered text, including paragraph
+spacing. Request IDs still hash the exact submitted source for safe retries.
+
+```text
+[h]NFT Show Today
+[p]We are starting at 8:00 UTC. Don't forget to join us.
+BeaniWorld Tournament after.
+[i]Miro
+```

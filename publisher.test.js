@@ -43,3 +43,30 @@ test('disabled by default and rejects incomplete configuration', () => {
   assert.equal(startPublisher({}, {}), null);
   assert.throws(() => startPublisher({}, { PUBLISH_ENABLED: 'true' }));
 });
+
+test('formatted text and photo captions enforce rendered limits and retain duplicate protection', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'publisher-format-'));
+  const calls = [];
+  const bot = {
+    sendMessage: async (chat, text, options) => { calls.push({ text, options }); return { chat: { id: chat }, message_id: calls.length }; },
+    sendPhoto: async (chat, image, options) => { calls.push({ text: options.caption, options }); return { chat: { id: chat }, message_id: calls.length }; },
+  };
+  const env = { PUBLISH_ENABLED: 'true', PUBLISH_API_KEY: 'x'.repeat(32), PUBLISH_STATE_DIR: dir, PUBLISH_DESTINATIONS: '{"frens":{"chat_id":"-123","message_thread_id":2}}', PORT: '0' };
+  const server = startPublisher(bot, env); await once(server, 'listening');
+  const post = data => fetch(`http://127.0.0.1:${server.address().port}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.PUBLISH_API_KEY}` }, body: JSON.stringify(data) });
+  const data = { request_id: 'format-post-001', destination: 'frens', text: '[h]Show & NFTs[p]Join us[i]Miro' };
+  try {
+    assert.equal((await post(data)).status, 200);
+    assert.deepEqual(calls[0], { text: '<b>Show &amp; NFTs</b>\n\nJoin us\n\n<i>Miro</i>', options: { message_thread_id: 2, parse_mode: 'HTML' } });
+    assert.equal((await post(data)).status, 200); assert.equal(calls.length, 1);
+    assert.equal((await post({ ...data, text: '[p]Changed' })).status, 409);
+    const image_base64 = Buffer.from([137,80,78,71,13,10,26,10]).toString('base64');
+    assert.equal((await post({ ...data, request_id: 'format-photo-001', image_base64 })).status, 200);
+    assert.equal(calls[1].options.parse_mode, 'HTML'); assert.equal(calls[1].text, calls[0].text);
+    assert.equal((await post({ ...data, request_id: 'format-limit-001', text: '[h]' + '&'.repeat(1024), image_base64 })).status, 200);
+    assert.equal((await post({ ...data, request_id: 'format-limit-002', text: '[h]' + 'a'.repeat(1025), image_base64 })).status, 400);
+    assert.equal((await post({ ...data, request_id: 'format-limit-003', text: '[h]' + 'a'.repeat(4096) })).status, 200);
+    assert.equal((await post({ ...data, request_id: 'format-limit-004', text: '[h]' + 'a'.repeat(4097) })).status, 400);
+    assert.equal((await post({ ...data, request_id: 'format-empty-001', text: '[h][p][i]' })).status, 400);
+  } finally { await new Promise(r => server.close(r)); fs.rmSync(dir, { recursive: true }); }
+});

@@ -2,6 +2,7 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { formatAnnouncement } = require('./announcementFormatting');
 
 function startPublisher(bot, env = process.env) {
   if (env.PUBLISH_ENABLED !== 'true') return null;
@@ -32,9 +33,13 @@ function startPublisher(bot, env = process.env) {
   const { request_id: id, destination, text, image_base64: encoded } = input;
   if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(id) ||
       typeof destination !== 'string' || !Object.hasOwn(destinations, destination) ||
-      typeof text !== 'string' || !text.trim() || [...text].length > (encoded ? 1024 : 4096) ||
+      typeof text !== 'string' || !text.trim() ||
       Object.keys(input).some(k => !['request_id', 'destination', 'text', 'image_base64'].includes(k))) {
     return reply(400, { error: 'Invalid request, destination or text length' });
+  }
+  const formatted = formatAnnouncement(text);
+  if (!formatted.plainText.trim() || [...formatted.plainText].length > (encoded ? 1024 : 4096)) {
+    return reply(400, { error: 'Rendered text must contain content and fit the Telegram text or caption limit' });
   }
   let image;
   let mime;
@@ -62,8 +67,8 @@ function startPublisher(bot, env = process.env) {
   let sent;
   try {
     sent = image
-      ? await bot.sendPhoto(target.chat_id, image, { ...options, caption: text }, { filename: mime === 'image/png' ? 'announcement.png' : 'announcement.jpg', contentType: mime })
-      : await bot.sendMessage(target.chat_id, text, options);
+      ? await bot.sendPhoto(target.chat_id, image, { ...options, ...formatted.options, caption: formatted.text }, { filename: mime === 'image/png' ? 'announcement.png' : 'announcement.jpg', contentType: mime })
+      : await bot.sendMessage(target.chat_id, formatted.text, { ...options, ...formatted.options });
   } catch (error) {
     console.warn(JSON.stringify({ event: 'publish_delivery_uncertain', request_id: id, code: String(error.code || 'UNKNOWN'), telegram_error_code: error.response?.body?.error_code }));
     // Keep pending: Telegram may have accepted a request before a network timeout.
