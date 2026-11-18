@@ -2,6 +2,7 @@ require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const NFTService = require('./nftService');
 const { getTribeLine, detailUrl } = require('./tribeService');
+const { registerCitizenCommand } = require('./citizenCommand');
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const contractAddress = process.env.NFT_CONTRACT_ADDRESS;
@@ -23,6 +24,7 @@ const nftService = new NFTService(rpcUrl, contractAddress);
 
 // Optional publisher shares the existing bot and polling process.
 require('./publisher').startPublisher(bot);
+registerCitizenCommand(bot);
 
 console.log('Telegram NFT Bot is running...');
 
