@@ -23,6 +23,14 @@ const nftService = new NFTService(rpcUrl, contractAddress);
 
 // Optional publisher shares the existing bot and polling process.
 require('./publisher').startPublisher(bot);
+// Group ID helper: available only when Lumen Hunt is enabled for testing.
+if (process.env.LUMEN_HUNT_ENABLED === 'true') {
+  bot.onText(/^\/chatid(?:@\w+)?\s*$/, async (msg) => {
+    if (!['group', 'supergroup'].includes(msg.chat.type)) return;
+    await bot.sendMessage(msg.chat.id, '🧪 Telegram test group ID: ' + msg.chat.id);
+  });
+}
+
 // Opt-in community game; disabled by default.
 require('./lumenHunt').register(bot);
 
