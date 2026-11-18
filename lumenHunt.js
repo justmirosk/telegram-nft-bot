@@ -105,18 +105,18 @@ function register(bot) {
       const mine=ranks.find(r=>r.userId===String(msg.from.id));
       return bot.sendMessage(msg.chat.id,'💎 '+displayName(msg.from)+': '+(mine?.lumens||0)+' Lumens discovered this week.');
     }
-    if(command==='/bwhuntstats') return bot.sendMessage(msg.chat.id,'🌍 Lumen Hunt · '+week+'\nHunters: '+ranks.length+'\nLumens discovered: '+ranks.reduce((s,r)=>s+r.lumens,0));
+    if(command==='/huntstats') return bot.sendMessage(msg.chat.id,'🌍 Lumen Hunt · '+week+'\nHunters: '+ranks.length+'\nLumens discovered: '+ranks.reduce((s,r)=>s+r.lumens,0));
     return bot.sendMessage(msg.chat.id,'🏆 Lumen Hunt · week of '+week+'\n'+(ranks.slice(0,10).map((r,i)=>(i+1)+'. '+r.name+' — '+r.lumens+' Lumens').join('\n')||'No hunts yet!'));
   });
-  bot.onText(/^\/bwhuntadmin(?:@\w+)?(?:\s+(\d{4}-\d{2}-\d{2}))?\s*$/,async(msg,match)=>{
+  bot.onText(/^\/huntadmin(?:@\w+)?(?:\s+(\d{4}-\d{2}-\d{2}))?\s*$/,async(msg,match)=>{
     if(!ADMIN_IDS.has(String(msg.from.id))) return;
-    if(msg.chat.type!=='private') return bot.sendMessage(msg.chat.id,'For privacy, use /bwhuntadmin in a private chat with the bot.');
+    if(msg.chat.type!=='private') return bot.sendMessage(msg.chat.id,'For privacy, use /huntadmin in a private chat with the bot.');
     const week=match[1]||weekKey(new Date()), state=load(), ranks=bonuses(leaderboard(state,week));
     const lines=ranks.map((r,i)=>[(i+1),r.userId,r.name,r.lumens,r.bonus,r.total,state.payouts[week+':'+r.userId]||'PENDING'].join(' | '));
     const report='Week '+week+'\nRank | Telegram ID | Name | Found | Bonus | Total | Status\n'+(lines.join('\n')||'No hunts');
     for(let i=0;i<report.length;i+=3500) await bot.sendMessage(msg.chat.id,report.slice(i,i+3500));
   });
-  bot.onText(/^\/bwhuntpaid(?:@\w+)?\s+(\d{4}-\d{2}-\d{2})\s+(\d+)\s*$/,async(msg,match)=>{
+  bot.onText(/^\/huntpaid(?:@\w+)?\s+(\d{4}-\d{2}-\d{2})\s+(\d+)\s*$/,async(msg,match)=>{
     if(msg.chat.type!=='private'||!ADMIN_IDS.has(String(msg.from.id))) return;
     const [_,week,userId]=match;
     if(week>=weekKey(new Date())) return bot.sendMessage(msg.chat.id,'Only closed weeks can be marked credited.');
