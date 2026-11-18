@@ -72,6 +72,12 @@ function leaderboard(state,week) {
 }
 function bonuses(ranks) { return ranks.map((r,i)=>({...r,bonus:[100,60,40][i]||0,total:r.lumens+([100,60,40][i]||0)})); }
 function register(bot) {
+  // Temporary rollout diagnostic: reports the chat ID without exposing secrets.
+  bot.onText(/^\/huntcheck(?:@\w+)?\s*$/, async msg => {
+    if (!['group','supergroup'].includes(msg.chat.type)) return;
+    const matches = Boolean(GROUP_ID) && String(msg.chat.id) === GROUP_ID;
+    await bot.sendMessage(msg.chat.id, '🔎 Lumen Hunt check\nChat ID: '+msg.chat.id+'\nConfigured group: '+(matches ? 'MATCH' : 'DIFFERENT')+'\nFeature: '+(process.env.LUMEN_HUNT_ENABLED === 'true' ? 'enabled' : 'disabled'));
+  });
   if(process.env.LUMEN_HUNT_ENABLED !== 'true') return;
   const inGroup = msg => ['group','supergroup'].includes(msg.chat.type) && Boolean(GROUP_ID) && String(msg.chat.id)===GROUP_ID;
   bot.onText(/^\/bwhunt(?:@\w+)?\s*$/,async msg=>{
