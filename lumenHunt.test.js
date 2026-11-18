@@ -4,7 +4,7 @@ const {PATHS,weekKey,leaderboard,bonuses,roll}=require('./lumenHunt');
 test('path probabilities sum to 100 and rewards are supported',()=>{
  for(const path of Object.values(PATHS)) {
   assert.equal(path.weights.reduce((s,x)=>s+x[1],0),100);
-  for(let i=0;i<100;i++) assert.ok(path.weights.some(([v])=>v===roll(path.weights)));
+  for(let i=0;i<100;i++) { const reward=roll(path.weights); assert.ok(path.weights.some(([v])=>v===reward)); }
  }
 });
 test('week starts Monday UTC including Sunday rollover',()=>{
