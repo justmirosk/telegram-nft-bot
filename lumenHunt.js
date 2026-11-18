@@ -73,7 +73,7 @@ function bonuses(ranks) { return ranks.map((r,i)=>({...r,bonus:[100,60,40][i]||0
 function register(bot) {
   if(process.env.LUMEN_HUNT_ENABLED !== 'true') return;
   const inGroup = msg => ['group','supergroup'].includes(msg.chat.type) && (!GROUP_ID || String(msg.chat.id)===GROUP_ID);
-  bot.onText(/^\/hunt(?:@\w+)?\s*$/,async msg=>{
+  bot.onText(/^\/bwhunt(?:@\w+)?\s*$/,async msg=>{
     if(!inGroup(msg)) return;
     const today=dateKey(new Date()), state=load();
     if(state.hunts[msg.from.id+':'+today]) return bot.sendMessage(msg.chat.id,'🌙 Your hunt is complete for today. Return tomorrow (UTC)!');
@@ -86,8 +86,8 @@ function register(bot) {
     if(!q.data?.startsWith('lh:')) return;
     const [prefix,day,userId,choice]=q.data.split(':');
     if(!PATHS[choice] || String(q.from.id)!==userId) return bot.answerCallbackQuery(q.id,{text:'This adventure belongs to another hunter.',show_alert:true});
-    if(!q.message || !inGroup(q.message)) return bot.answerCallbackQuery(q.id,{text:'Use /hunt in the group.'});
-    if(day!==dateKey(new Date())) return bot.answerCallbackQuery(q.id,{text:'This adventure has expired. Use /hunt again.'});
+    if(!q.message || !inGroup(q.message)) return bot.answerCallbackQuery(q.id,{text:'Use /bwhunt in the group.'});
+    if(day!==dateKey(new Date())) return bot.answerCallbackQuery(q.id,{text:'This adventure has expired. Use /bwhunt again.'});
     const state=load(), key=userId+':'+day;
     if(state.hunts[key]) return bot.answerCallbackQuery(q.id,{text:'You have already hunted today!'});
     const lumens=roll(PATHS[choice].weights), lines=STORIES[choice][lumens];
@@ -105,18 +105,18 @@ function register(bot) {
       const mine=ranks.find(r=>r.userId===String(msg.from.id));
       return bot.sendMessage(msg.chat.id,'💎 '+displayName(msg.from)+': '+(mine?.lumens||0)+' Lumens discovered this week.');
     }
-    if(command==='/huntstats') return bot.sendMessage(msg.chat.id,'🌍 Lumen Hunt · '+week+'\nHunters: '+ranks.length+'\nLumens discovered: '+ranks.reduce((s,r)=>s+r.lumens,0));
+    if(command==='/bwhuntstats') return bot.sendMessage(msg.chat.id,'🌍 Lumen Hunt · '+week+'\nHunters: '+ranks.length+'\nLumens discovered: '+ranks.reduce((s,r)=>s+r.lumens,0));
     return bot.sendMessage(msg.chat.id,'🏆 Lumen Hunt · week of '+week+'\n'+(ranks.slice(0,10).map((r,i)=>(i+1)+'. '+r.name+' — '+r.lumens+' Lumens').join('\n')||'No hunts yet!'));
   });
-  bot.onText(/^\/huntadmin(?:@\w+)?(?:\s+(\d{4}-\d{2}-\d{2}))?\s*$/,async(msg,match)=>{
+  bot.onText(/^\/bwhuntadmin(?:@\w+)?(?:\s+(\d{4}-\d{2}-\d{2}))?\s*$/,async(msg,match)=>{
     if(!ADMIN_IDS.has(String(msg.from.id))) return;
-    if(msg.chat.type!=='private') return bot.sendMessage(msg.chat.id,'For privacy, use /huntadmin in a private chat with the bot.');
+    if(msg.chat.type!=='private') return bot.sendMessage(msg.chat.id,'For privacy, use /bwhuntadmin in a private chat with the bot.');
     const week=match[1]||weekKey(new Date()), state=load(), ranks=bonuses(leaderboard(state,week));
     const lines=ranks.map((r,i)=>[(i+1),r.userId,r.name,r.lumens,r.bonus,r.total,state.payouts[week+':'+r.userId]||'PENDING'].join(' | '));
     const report='Week '+week+'\nRank | Telegram ID | Name | Found | Bonus | Total | Status\n'+(lines.join('\n')||'No hunts');
     for(let i=0;i<report.length;i+=3500) await bot.sendMessage(msg.chat.id,report.slice(i,i+3500));
   });
-  bot.onText(/^\/huntpaid(?:@\w+)?\s+(\d{4}-\d{2}-\d{2})\s+(\d+)\s*$/,async(msg,match)=>{
+  bot.onText(/^\/bwhuntpaid(?:@\w+)?\s+(\d{4}-\d{2}-\d{2})\s+(\d+)\s*$/,async(msg,match)=>{
     if(msg.chat.type!=='private'||!ADMIN_IDS.has(String(msg.from.id))) return;
     const [_,week,userId]=match;
     if(week>=weekKey(new Date())) return bot.sendMessage(msg.chat.id,'Only closed weeks can be marked credited.');
