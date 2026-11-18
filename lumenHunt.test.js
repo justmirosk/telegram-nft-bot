@@ -21,3 +21,17 @@ test('leaderboard sums weekly hunts and assigns bonuses once',()=>{
  const ranks=bonuses(leaderboard({hunts},'2026-11-16'));
  assert.deepEqual(ranks.map(x=>[x.userId,x.lumens,x.bonus,x.total]),[['2',50,100,150],['1',50,60,110]]);
 });
+
+test('numeric Telegram IDs remain consistent across leaderboard and payout',()=>{
+ const hunts={a:{userId:123,name:'Hunter',week:'2026-11-16',lumens:25,at:'2026-11-16T12:00:00Z'}};
+ const ranks=bonuses(leaderboard({hunts},'2026-11-16'));
+ assert.equal(ranks[0].userId,'123');
+ assert.equal(ranks[0].total,125);
+});
+test('ties rank by when score was reached',()=>{
+ const hunts={
+  a:{userId:'1',name:'First',week:'2026-11-16',lumens:25,at:'2026-11-16T12:00:00Z'},
+  b:{userId:'2',name:'Second',week:'2026-11-16',lumens:25,at:'2026-11-16T13:00:00Z'}
+ };
+ assert.deepEqual(leaderboard({hunts},'2026-11-16').map(x=>x.userId),['1','2']);
+});
