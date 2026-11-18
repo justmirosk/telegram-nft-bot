@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const DATA_FILE = process.env.LUMEN_HUNT_DATA_FILE || '/data/lumen-hunt.json';
-const GROUP_ID = process.env.LUMEN_HUNT_GROUP_ID || '';
+const GROUP_IDS = new Set((process.env.LUMEN_HUNT_GROUP_ID || '').split(',').map(id => id.trim()).filter(Boolean));
 const ADMIN_IDS = new Set((process.env.LUMEN_HUNT_ADMIN_IDS || '').split(',').map(s => s.trim()).filter(Boolean));
 const PATHS = {
   shrine: { title: '💎 Ancient Shrine', weights: [[0,10],[10,50],[25,30],[50,10]] },
@@ -224,11 +224,11 @@ function register(bot) {
   // Temporary rollout diagnostic: reports the chat ID without exposing secrets.
   bot.onText(/^\/huntcheck(?:@\w+)?\s*$/, async msg => {
     if (!['group','supergroup'].includes(msg.chat.type)) return;
-    const matches = Boolean(GROUP_ID) && String(msg.chat.id) === GROUP_ID;
+    const matches = GROUP_IDS.has(String(msg.chat.id));
     await bot.sendMessage(msg.chat.id, '🔎 Lumen Hunt check\nChat ID: '+msg.chat.id+'\nConfigured group: '+(matches ? 'MATCH' : 'DIFFERENT')+'\nFeature: '+(process.env.LUMEN_HUNT_ENABLED === 'true' ? 'enabled' : 'disabled'));
   });
   if(process.env.LUMEN_HUNT_ENABLED !== 'true') return;
-  const inGroup = msg => ['group','supergroup'].includes(msg.chat.type) && Boolean(GROUP_ID) && String(msg.chat.id)===GROUP_ID;
+  const inGroup = msg => ['group','supergroup'].includes(msg.chat.type) && GROUP_IDS.has(String(msg.chat.id));
   bot.onText(/^\/bwhunt(?:@\w+)?\s*$/,async msg=>{
     if(!inGroup(msg)) return;
     const today=dateKey(new Date()), state=load();
