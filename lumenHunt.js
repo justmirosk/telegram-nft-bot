@@ -72,7 +72,7 @@ function leaderboard(state,week) {
 function bonuses(ranks) { return ranks.map((r,i)=>({...r,bonus:[100,60,40][i]||0,total:r.lumens+([100,60,40][i]||0)})); }
 function register(bot) {
   if(process.env.LUMEN_HUNT_ENABLED !== 'true') return;
-  const inGroup = msg => ['group','supergroup'].includes(msg.chat.type) && (!GROUP_ID || String(msg.chat.id)===GROUP_ID);
+  const inGroup = msg => ['group','supergroup'].includes(msg.chat.type) && Boolean(GROUP_ID) && String(msg.chat.id)===GROUP_ID;
   bot.onText(/^\/bwhunt(?:@\w+)?\s*$/,async msg=>{
     if(!inGroup(msg)) return;
     const today=dateKey(new Date()), state=load();
