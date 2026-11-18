@@ -3,6 +3,8 @@ on:
   push:
     branches: [feature/lumen-hunt]
   workflow_dispatch:
+  pull_request:
+    branches: [main]
 permissions:
   contents: read
 jobs:
