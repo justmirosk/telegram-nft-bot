@@ -9,10 +9,10 @@ This feature is committed to `feature/lumen-hunt` and is **disabled by default**
 - `LUMEN_HUNT_DATA_FILE=/data/lumen-hunt.json` — persisted JSON on the Railway mounted volume.
 
 ## Commands
-- Group: `/hunt`, `/lboard`, `/myscore`, `/huntstats`.
-- Admin private chat: `/huntadmin YYYY-MM-DD` (Monday UTC week start), `/huntpaid YYYY-MM-DD TELEGRAM_USER_ID`.
+- Group: `/bwhunt`, `/lboard`, `/myscore`, `/bwhuntstats`.
+- Admin private chat: `/bwhuntadmin YYYY-MM-DD` (Monday UTC week start), `/bwhuntpaid YYYY-MM-DD TELEGRAM_USER_ID`.
 
-`/huntpaid` only marks a manual payment as credited. It does **not** credit BeaniScrolls. Verify the citizen/wallet link and complete the actual Lumen credit first.
+`/bwhuntpaid` only marks a manual payment as credited. It does **not** credit BeaniScrolls. Verify the citizen/wallet link and complete the actual Lumen credit first.
 
 ## Rules
 One hunt per Telegram user ID per UTC date, with server-side weighted reward selection and a public edited Telegram result. Weeks run Monday 00:00 to Sunday 23:59 UTC. Top-three bonuses are 100/60/40 Lumens. Leaderboard ranking excludes bonuses. Equal scores are ordered by time of last score increase, then numeric ID. Payout reports are pending until manually marked credited.
@@ -27,6 +27,6 @@ One hunt per Telegram user ID per UTC date, with server-side weighted reward sel
 
 ## Known limitations
 - No Telegram-to-BeaniScrolls identity linking yet; manual wallet verification is mandatory.
-- No automatic weekly announcement or payout. Admin retrieves a completed week's report with `/huntadmin`.
+- No automatic weekly announcement or payout. Admin retrieves a completed week's report with `/bwhuntadmin`.
 - The JSON file assumes a single bot process. No cross-instance locking.
 - The feature is isolated from the existing tournament and NFT commands.
