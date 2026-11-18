@@ -64,8 +64,9 @@ function records(state,week) {
 function leaderboard(state,week) {
   const users = new Map();
   for(const h of records(state,week)) {
-    const u=users.get(h.userId)||{userId:h.userId,name:h.name,lumens:0,firstReached:''};
-    u.name=h.name; u.lumens+=h.lumens; u.firstReached=h.at; users.set(h.userId,u);
+    const id=String(h.userId);
+    const u=users.get(id)||{userId:id,name:h.name,lumens:0,firstReached:''};
+    u.name=h.name; u.lumens+=h.lumens; u.firstReached=h.at; users.set(id,u);
   }
   return [...users.values()].sort((a,b)=>b.lumens-a.lumens || a.firstReached.localeCompare(b.firstReached) || a.userId.localeCompare(b.userId));
 }
@@ -94,7 +95,7 @@ function register(bot) {
     const story=lines[crypto.randomInt(lines.length)];
     state.hunts[key]={userId,name:displayName(q.from),day,week:weekKey(new Date()),path:choice,lumens,at:new Date().toISOString()};
     save(state);
-    const weekly=leaderboard(state,weekKey(new Date())).find(x=>x.userId===userId).lumens;
+    const weekly=leaderboard(state,weekKey(new Date())).find(x=>x.userId===String(userId)).lumens;
     try { await bot.answerCallbackQuery(q.id,{text:'Adventure complete!'}); } catch(e) { console.error('Hunt callback acknowledgement:',e.message); }
     await bot.editMessageText('⚔️ '+displayName(q.from)+' entered '+PATHS[choice].title+'!\n\n'+story+'\n\n✨ +'+lumens+' Lumens discovered!\n📊 Weekly total: '+weekly+' Lumens (pending credit)',{chat_id:q.message.chat.id,message_id:q.message.message_id});
   });
