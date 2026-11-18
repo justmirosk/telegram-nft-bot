@@ -12,25 +12,174 @@ const PATHS = {
   cave: { title: '🦇 Forgotten Cave', weights: [[0,50],[10,10],[25,10],[50,15],[100,15]] }
 };
 const STORIES = {
-  shrine: {
-    0: ["JokerBeany offered you a golden chest. It contained one potato. 🥔", "The altar sneezed glitter and went back to sleep."],
-    10: ["A glowing mushroom told you a terrible joke. You laughed anyway.", "The shrine's caretaker rewarded you for dusting the altar."],
-    25: ["Four crystals shimmered. One dropped a little gift into your pocket.", "The Weaver's light revealed a hidden stash beneath the stones."],
-    50: ["A rare blessing lit up the entire shrine!", "An ancient scroll unfolded into a shower of Lumens."]
+  "shrine": {
+    "0": [
+      "JokerBeany offered you a golden chest. It contained one potato. 🥔",
+      "The altar sneezed glitter and went back to sleep.",
+      "You prayed for wealth. The shrine sent an invoice for spiritual maintenance.",
+      "A golden door opened onto a broom cupboard. The broom was also disappointed.",
+      "JokerBeany sold you a sacred key. It unlocks absolutely nothing.",
+      "The altar accepted your offering and immediately went on holiday.",
+      "You found a prophecy: 'Better luck tomorrow.' It was notarised.",
+      "A ghost offered you eternal wisdom. You asked for Lumens. It left.",
+      "The sacred chest contained a single sock. Not even a matching pair.",
+      "The Weaver's statue winked. Your wallet remained aggressively empty."
+    ],
+    "10": [
+      "A glowing mushroom told you a terrible joke. You laughed anyway.",
+      "The shrine's caretaker rewarded you for dusting the altar.",
+      "A monk paid you to stop singing the ancient hymn.",
+      "You rescued a candle from a dramatic puddle. The shrine applauded politely.",
+      "A tiny guardian demanded a password. 'Potato' somehow worked.",
+      "JokerBeany's fake donation box had a real coin stuck inside.",
+      "A spirit rewarded you for not touching the suspicious red button.",
+      "You found ten Lumens behind a sign reading 'Definitely No Lumens'.",
+      "The shrine's accountant made a rounding error in your favour.",
+      "A dusty scroll said 'Congratulations, mediocre hero.'"
+    ],
+    "25": [
+      "Four crystals shimmered. One dropped a little gift into your pocket.",
+      "The Weaver's light revealed a hidden stash beneath the stones.",
+      "The altar's vending machine dispensed Lumens instead of stale biscuits.",
+      "A stone gargoyle lost a bet against you and paid up.",
+      "You returned a haunted sandal. Its owner was surprisingly generous.",
+      "The shrine's tax collector mistook you for a refund recipient.",
+      "A choir of ghosts sang your name. One dropped a purse.",
+      "JokerBeany tried to pick your pocket and accidentally filled it.",
+      "The Weaver's lantern lit a secret compartment marked 'Emergency Snacks'.",
+      "A sleepy oracle predicted 25 Lumens. For once, the oracle was useful."
+    ],
+    "50": [
+      "A rare blessing lit up the entire shrine!",
+      "An ancient scroll unfolded into a shower of Lumens.",
+      "You discovered the shrine's emergency treasure fund. Nobody asked questions.",
+      "The altar declared you spiritually wealthy and, unusually, meant it.",
+      "A guardian challenged you to a staring contest. It blinked after 800 years.",
+      "JokerBeany attempted a dramatic heist and dropped the entire loot.",
+      "The Weaver's blessing arrived with a receipt and fifty Lumens.",
+      "A cursed crown turned out to be a very generous tip jar.",
+      "You opened the holy vault using the ancient password: 'password'.",
+      "A ghost tried to haunt you but paid rent instead."
+    ]
   },
-  forest: {
-    0: ["You argued with a tree. The tree won.", "JokerBeany replaced the treasure map with a lunch menu."],
-    10: ["A friendly firefly led you to a tiny cache.", "You helped a lost MiniBeany find the path home."],
-    25: ["A hollow log held a surprising stash.", "The forest spirits thanked you for being polite."],
-    50: ["An enchanted grove revealed a secret vault.", "A rare green glow guided you to forgotten treasure."],
-    100: ["The entire forest erupted in light: a legendary discovery!"]
+  "forest": {
+    "0": [
+      "You argued with a tree. The tree won.",
+      "JokerBeany replaced the treasure map with a lunch menu.",
+      "You argued with a tree. Its lawyer also won.",
+      "A mushroom offered investment advice. It has since disappeared.",
+      "You followed glowing footprints into a very judgmental swamp.",
+      "A squirrel stole your map and sold it back as an NFT.",
+      "The forest voted unanimously to keep its treasure.",
+      "You found a skeleton clutching directions to another skeleton.",
+      "A wolf invited you to dinner. You were listed as the special.",
+      "A talking stump promised riches. It was lying through its bark."
+    ],
+    "10": [
+      "A friendly firefly led you to a tiny cache.",
+      "You helped a lost MiniBeany find the path home.",
+      "A suspicious mushroom paid you to forget its name.",
+      "A fox returned your stolen lunch, minus the sandwich, plus ten Lumens.",
+      "You helped a ghost find its grave. It gave you a tip.",
+      "A tree charged you a toll but forgot to collect the full amount.",
+      "A sleepy sprite rewarded you for not waking its boss.",
+      "You found a tiny treasure chest inside a larger, emptier chest.",
+      "A forest spirit traded Lumens for your worst joke.",
+      "A raven dropped ten Lumens and demanded a five-star review."
+    ],
+    "25": [
+      "A hollow log held a surprising stash.",
+      "The forest spirits thanked you for being polite.",
+      "You won a dance contest against three deeply embarrassed mushrooms.",
+      "A haunted picnic basket contained treasure and a strongly worded note.",
+      "You rescued a squirrel from a tree. It was its own tree.",
+      "A green wisp led you to a stash hidden beneath a sarcastic root.",
+      "You beat JokerBeany at hide-and-seek. He was behind the only tree.",
+      "A fox offered you a mysterious contract. The fine print was surprisingly fair.",
+      "The forest council awarded you Lumens for outstanding nonsense.",
+      "You found a forgotten druid's purse. It was labelled 'Definitely Not Thornvail'."
+    ],
+    "50": [
+      "An enchanted grove revealed a secret vault.",
+      "A rare green glow guided you to forgotten treasure.",
+      "You convinced an ancient oak that acorns are not legal currency.",
+      "A ghostly lumberjack paid you to keep his embarrassing secret.",
+      "You stumbled into a forest bank during its annual giveaway.",
+      "A giant spider offered treasure instead of an awkward conversation.",
+      "JokerBeany's treasure trap worked perfectly—on JokerBeany.",
+      "You won fifty Lumens in a raffle organised by suspicious frogs.",
+      "A moonlit grove revealed a chest and an unpaid parking ticket.",
+      "A wolf challenged you to chess. It was terrible at chess."
+    ],
+    "100": [
+      "The entire forest erupted in light: a legendary discovery!",
+      "The forest crowned you King of Mushrooms. The salary is excellent.",
+      "A thousand fireflies formed the words 'JACKPOT' before requesting overtime.",
+      "You found a legendary vault guarded by a squirrel with terrible eyesight.",
+      "Thornvail's ancient grove blessed you. Even the trees looked jealous.",
+      "A forest Beast surrendered its hoard after hearing your singing.",
+      "The spirits threw a victory parade. The parade was mostly confused deer.",
+      "You uncovered a royal treasure under a sign reading 'Do Not Dig'.",
+      "JokerBeany accidentally gave you the winning treasure map."
+    ]
   },
-  cave: {
-    0: ["A Beast chased you out. At least you kept your shoes.", "You found a chest. It was full of angry bats."],
-    10: ["You escaped a cave-in with a handful of Lumens."],
-    25: ["A glowing tunnel led you to a hidden cache."],
-    50: ["You outsmarted a cave guardian and claimed its treasure."],
-    100: ["You offered a hungry Beast your lunch. It let you keep the legendary treasure!"]
+  "cave": {
+    "0": [
+      "A Beast chased you out. At least you kept your shoes.",
+      "You found a chest. It was full of angry bats.",
+      "A Beast offered treasure or your soul. You chose treasure. It chose neither.",
+      "You found a skeleton clutching a map to another skeleton.",
+      "The cave monster ate your torch. It said the lighting was better this way.",
+      "A chest opened to reveal a smaller chest containing a tax bill.",
+      "You disturbed an ancient curse. It asked you to come back during office hours.",
+      "A ghost whispered 'run'. You asked 'why?' and immediately found out.",
+      "The cave's exit sign pointed deeper inside. Very reassuring.",
+      "You heard ominous footsteps. They were yours, echoing badly."
+    ],
+    "10": [
+      "You escaped a cave-in with a handful of Lumens.",
+      "You escaped a hungry Beast by offering it your least favourite sandwich.",
+      "A skeleton paid you ten Lumens to stop rearranging its bones.",
+      "You found treasure in a boot. The previous owner was still wearing it.",
+      "A cave goblin lost a bet on whether you would survive.",
+      "You negotiated a refund from a cursed vending machine.",
+      "A bat dropped ten Lumens. It refuses to discuss where they came from.",
+      "A stone guardian charged a toll, then gave you change.",
+      "You discovered a tiny vault behind an enormous warning sign."
+    ],
+    "25": [
+      "A glowing tunnel led you to a hidden cache.",
+      "You bribed a cave guardian with a drawing of a potato.",
+      "A ghost tried to scare you but accidentally revealed its savings.",
+      "You followed a trail of bones to a surprisingly cheerful treasure room.",
+      "A Beast challenged you to rock-paper-scissors. It only knew rock.",
+      "A cursed helmet whispered winning lottery numbers from last week.",
+      "You found twenty-five Lumens in a monster's emergency lunchbox.",
+      "The cave accountant had been dead for centuries. The books still balanced.",
+      "JokerBeany set a trap and forgot which side he was standing on."
+    ],
+    "50": [
+      "You outsmarted a cave guardian and claimed its treasure.",
+      "A dragon sneezed, revealing a hidden pile of Lumens.",
+      "You survived a monster's cooking. It paid you for your silence.",
+      "A haunted knight surrendered after you complimented its rusty armour.",
+      "You found a secret vault labelled 'Definitely Not A Secret Vault'.",
+      "A Beast hired you as a consultant, then immediately regretted it.",
+      "A skeleton pointed toward treasure. It had been pointing for 400 years.",
+      "You stole a treasure chest from a trap that was on its lunch break.",
+      "The cave's ancient guardian accepted your extremely fake royal credentials."
+    ],
+    "100": [
+      "You offered a hungry Beast your lunch. It let you keep the legendary treasure!",
+      "A Beast offered treasure or your soul. You negotiated for both. It hired a lawyer.",
+      "You discovered a dragon's retirement fund. The dragon retired yesterday.",
+      "The cave crowned you its ruler. Your subjects are bats and one rude skeleton.",
+      "A legendary monster surrendered its hoard to avoid your terrible jokes.",
+      "You opened the forbidden vault and found a hundred Lumens and a complaint form.",
+      "A ghost declared you its heir. It had excellent financial planning.",
+      "JokerBeany's master plan accidentally made you very rich.",
+      "You survived the Cave of Certain Doom. The sign was apparently outdated."
+    ]
   }
 };
 const dateKey = d => d.toISOString().slice(0,10);
