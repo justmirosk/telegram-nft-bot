@@ -19,13 +19,22 @@ async function captureCitizenCard(base, wallet) {
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   })
   try {
-    const headers = {}
-    if (process.env.VERCEL_OIDC_TOKEN) headers['x-vercel-trusted-oidc-idp-token'] = process.env.VERCEL_OIDC_TOKEN
-    const page = await browser.newPage({
-      viewport: { width: 750, height: 1050 }, deviceScaleFactor: 1,
-      extraHTTPHeaders: headers,
-    })
-    await page.goto(renderUrl(base, wallet), { waitUntil: 'domcontentloaded', timeout: 30000 })
+    const target = renderUrl(base, wallet)
+    const page = await browser.newPage({ viewport: { width: 750, height: 1050 }, deviceScaleFactor: 1 })
+    // Keep the short-lived Preview credential on the target origin only.
+    // Images and scripts may be hosted on unrelated domains.
+    if (process.env.VERCEL_OIDC_TOKEN) {
+      const targetOrigin = new URL(target).origin
+      await page.route('**/*', (route) => {
+        const request = route.request()
+        if (new URL(request.url()).origin !== targetOrigin) return route.continue()
+        return route.continue({ headers: {
+          ...request.headers(),
+          'x-vercel-trusted-oidc-idp-token': process.env.VERCEL_OIDC_TOKEN,
+        } })
+      })
+    }
+    await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 30000 })
     if (!await page.locator('img[alt="QR code linking to the public BeaniWorld profile"]').count()) {
       console.log('Citizen render diagnostic:', JSON.stringify({
         url: page.url(), title: await page.title(),
@@ -36,6 +45,9 @@ async function captureCitizenCard(base, wallet) {
       throw new Error('Protected Vercel Preview requires authenticated browser access; refusing to screenshot login page')
     }
     await page.locator('main > div').first().waitFor({ state: 'visible', timeout: 30000 })
+    // QR is generated after hydration; it must exist before image checks.
+    const qr = page.locator('img[alt="QR code linking to the public BeaniWorld profile"]')
+    await qr.waitFor({ state: 'visible', timeout: 15000 })
     await page.evaluate(async () => {
       await document.fonts.ready
       const images = [...document.querySelectorAll('main img')]
@@ -49,8 +61,9 @@ async function captureCitizenCard(base, wallet) {
         if (!img.naturalWidth) throw new Error('Card image failed to load: ' + img.alt)
       }))
     })
-    // The QR is populated in a React effect. Wait until it appears.
-    await page.locator('img[alt="QR code linking to the public BeaniWorld profile"]').waitFor({ timeout: 15000 })
+    if (!await qr.evaluate((img) => img.complete && img.naturalWidth > 0)) {
+      throw new Error('Citizen Card QR failed to load')
+    }
     const image = await page.locator('main > div').first().screenshot({ type: 'png', animations: 'disabled', timeout: 20000 })
     if (!image.length || image.length > 5 * 1024 * 1024) throw new Error('Citizen card PNG size invalid')
     return image
