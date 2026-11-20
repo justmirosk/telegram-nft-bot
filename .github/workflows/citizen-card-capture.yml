@@ -1,0 +1,37 @@
+name: Citizen Card browser capture checks
+on:
+  push:
+    branches: [feature/citizen-card-browser-capture, release/citizen-card-browser-capture]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+  chromium-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Build Railway Chromium image
+        run: docker build --tag citizen-card-capture:test .
+      - name: Verify Chromium and screenshot library
+        run: docker run --rm --entrypoint node citizen-card-capture:test -e "const {chromium}=require('playwright-core');(async()=>{const b=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});const p=await b.newPage({viewport:{width:750,height:1050}});await p.setContent('<main style=\"width:750px;height:1050px\">Citizen Card capture smoke test</main>');const png=await p.locator('main').screenshot();if(png.length<1000)throw Error('Screenshot empty');await b.close();console.log('Chromium PNG smoke test passed',png.length)})().catch(e=>{console.error(e);process.exit(1)})"
+      - name: Capture production BeaniScrolls Citizen Card
+        run: |
+          docker run --rm --entrypoint node citizen-card-capture:test -e "
+            const {captureCitizenCard}=require('./citizenCardCapture');
+            captureCitizenCard(
+              'https://www.beaniscrolls.com',
+              '0x0000000000000000000000000000000000000001'
+            ).then(png => {console.log('Production Citizen Card PNG generated:', png.length, 'bytes')})
+              .catch(e => {console.error(e);process.exit(1)})
+          "
