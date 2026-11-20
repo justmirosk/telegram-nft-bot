@@ -1,7 +1,7 @@
 // Read-only Citizen Profile lookup for verified Telegram accounts.
 // Does not grant privileges or expose wallet-private fields.
 function register(bot) {
-  bot.onText(/^\\/citizen(?:@\\w+)?\\s*$/i, async (msg) => {
+  bot.onText(/^\/citizen(?:@\w+)?\s*$/i, async (msg) => {
     const chatId = msg.chat.id
     if (msg.chat.type !== 'private') {
       await bot.sendMessage(chatId, 'For your privacy, send /citizen to me in a private chat.')
@@ -31,7 +31,7 @@ function register(bot) {
       const wallet = String(citizen.wallet || '')
       if (!/^0x[a-f0-9]{40}$/.test(wallet)) throw new Error('Invalid Citizen Profile')
       const profileUrl = 'https://www.beaniscrolls.com/citizens/' + wallet
-      await bot.sendMessage(chatId, '🫘 BeaniWorld Citizen\\n\\n' + name + '\\nWallet: ' + wallet.slice(0, 6) + '…' + wallet.slice(-4) + '\\n\\nOpen your Citizen Profile below.', {
+      await bot.sendMessage(chatId, '🫘 BeaniWorld Citizen\n\n' + name + '\nWallet: ' + wallet.slice(0, 6) + '…' + wallet.slice(-4) + '\n\nOpen your Citizen Profile below.', {
         reply_markup: { inline_keyboard: [[{ text: 'View Citizen Profile', url: profileUrl }]] },
         disable_web_page_preview: true,
       })
