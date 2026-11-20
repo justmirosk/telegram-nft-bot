@@ -31,8 +31,30 @@ function register(bot) {
       const wallet = String(citizen.wallet || '')
       if (!/^0x[a-f0-9]{40}$/.test(wallet)) throw new Error('Invalid Citizen Profile')
       const profileUrl = 'https://www.beaniscrolls.com/citizens/' + wallet
-      await bot.sendMessage(chatId, '🫘 BeaniWorld Citizen\n\n' + name + '\nWallet: ' + wallet.slice(0, 6) + '…' + wallet.slice(-4) + '\n\nOpen your Citizen Profile below.', {
-        reply_markup: { inline_keyboard: [[{ text: 'View Citizen Profile', url: profileUrl }]] },
+      const keyboard = { inline_keyboard: [[{ text: 'View Citizen Profile', url: profileUrl }]] }
+      const cardUrl = new URL(base)
+      cardUrl.pathname = '/api/connected-accounts/telegram/card'
+      cardUrl.search = new URLSearchParams({ telegramUserId: String(msg.from.id) }).toString()
+      try {
+        const imageResponse = await fetch(cardUrl, {
+          headers: { Authorization: 'Bearer ' + secret },
+          signal: AbortSignal.timeout(12000),
+        })
+        if (imageResponse.ok && imageResponse.headers.get('content-type')?.startsWith('image/png')) {
+          const image = Buffer.from(await imageResponse.arrayBuffer())
+          if (image.length && image.length <= 5 * 1024 * 1024) {
+            await bot.sendPhoto(chatId, image, {
+              caption: '🫘 BeaniWorld Citizen Card — ' + name,
+              reply_markup: keyboard,
+            }, { filename: 'BeaniWorld-Citizen.png', contentType: 'image/png' })
+            return
+          }
+        }
+      } catch (imageError) {
+        console.warn('Citizen Card image unavailable:', imageError?.message || 'unknown error')
+      }
+      await bot.sendMessage(chatId, '🫘 BeaniWorld Citizen\n\n' + name + '\nWallet: ' + wallet.slice(0, 6) + '…' + wallet.slice(-4) + '\n\nTo display your actual card here, open BeaniScrolls → Citizen Card and select Save Card for Telegram.', {
+        reply_markup: keyboard,
         disable_web_page_preview: true,
       })
     } catch (error) {
