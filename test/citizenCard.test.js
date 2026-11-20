@@ -28,9 +28,14 @@ function setup({ chatType = 'private', linked = true, imageOk = true, imageBytes
       async arrayBuffer() { return imageBytes },
     }
   }
-  register(bot)
+  const captures = []
+  register(bot, async (base, wallet) => {
+    captures.push({ base, wallet })
+    if (!imageOk) throw new Error('Screenshot unavailable')
+    return imageBytes
+  })
   return {
-    calls, sent,
+    calls, sent, captures,
     run() { return handler({ chat: { id: 88, type: chatType }, from: { id: 123456 } }) },
     cleanup() {
       global.fetch = originalFetch
@@ -45,9 +50,10 @@ test('linked citizen receives fresh PNG and public profile button', async () => 
   const t = setup()
   try {
     await t.run()
-    assert.equal(t.calls.length, 2)
+    assert.equal(t.calls.length, 1)
     assert.match(t.calls[0].url, /telegram\/citizen\?telegramUserId=123456/)
-    assert.match(t.calls[1].url, /telegram\/card\?telegramUserId=123456/)
+    assert.equal(t.captures.length, 1)
+    assert.equal(t.captures[0].wallet, '0x' + 'a'.repeat(40))
     assert.equal(t.calls[0].options.headers.Authorization, 'Bearer test-secret-not-real')
     assert.equal(t.sent[0].type, 'photo')
     assert.match(t.sent[0].options.reply_markup.inline_keyboard[0][0].url, /^https:\/\/www\.beaniscrolls\.com\/citizens\/0x/)
