@@ -29,7 +29,7 @@ function register(bot) {
       }
       const name = String(citizen.name || 'BeaniWorld Citizen').slice(0, 80)
       const wallet = String(citizen.wallet || '')
-      if (!/^0x[a-f0-9]{40}$/.test(wallet)) throw new Error('Invalid Citizen Profile')
+      if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) throw new Error('Invalid Citizen Profile')
       const profileUrl = 'https://www.beaniscrolls.com/citizens/' + wallet
       const keyboard = { inline_keyboard: [[{ text: 'View Citizen Profile', url: profileUrl }]] }
       const cardUrl = new URL(base)
