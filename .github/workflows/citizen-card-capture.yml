@@ -26,8 +26,11 @@ jobs:
       - name: Verify Chromium and screenshot library
         run: docker run --rm --entrypoint node citizen-card-capture:test -e "const {chromium}=require('playwright-core');(async()=>{const b=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});const p=await b.newPage({viewport:{width:750,height:1050}});await p.setContent('<main style=\"width:750px;height:1050px\">Citizen Card capture smoke test</main>');const png=await p.locator('main').screenshot();if(png.length<1000)throw Error('Screenshot empty');await b.close();console.log('Chromium PNG smoke test passed',png.length)})().catch(e=>{console.error(e);process.exit(1)})"
       - name: Capture deployed BeaniScrolls Preview card
+        if: env.VERCEL_OIDC_TOKEN != ''
+        env:
+          VERCEL_OIDC_TOKEN: ${{ secrets.BEANISCROLLS_PREVIEW_OIDC_TOKEN }}
         run: |
-          docker run --rm --entrypoint node citizen-card-capture:test -e "
+          docker run --rm --env VERCEL_OIDC_TOKEN --entrypoint node citizen-card-capture:test -e "
             const {captureCitizenCard}=require('./citizenCardCapture');
             captureCitizenCard(
               'https://v0-nft-character-library-jzt7n74el-justbode-3462s-projects.vercel.app',
