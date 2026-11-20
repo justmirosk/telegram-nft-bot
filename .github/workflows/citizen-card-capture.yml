@@ -1,7 +1,7 @@
 name: Citizen Card browser capture checks
 on:
   push:
-    branches: [feature/citizen-card-browser-capture, release/citizen-card-browser-capture]
+    branches: [feature/citizen-card-browser-capture, release/citizen-card-browser-capture, feature/golden-citizen-card-group]
   pull_request:
     branches: [main]
 permissions:

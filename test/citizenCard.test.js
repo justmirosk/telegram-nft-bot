@@ -67,12 +67,15 @@ test('unlinked account is directed to link, without image request', async () => 
     assert.match(t.sent[0].text, /not linked/)
   } finally { t.cleanup() }
 })
-test('group chat never performs private lookup', async () => {
+test('group command publishes only requesting linked citizen public card', async () => {
   const t = setup({ chatType: 'group' })
   try {
     await t.run()
-    assert.equal(t.calls.length, 0)
-    assert.match(t.sent[0].text, /private chat/)
+    assert.equal(t.calls.length, 1)
+    assert.match(t.calls[0].url, /telegramUserId=123456/)
+    assert.equal(t.sent[0].type, 'photo')
+    assert.equal(t.sent[0].id, 88)
+    assert.ok(t.sent[0].options.reply_markup.inline_keyboard[0][0].url.includes('beaniscrolls.com/citizens/'))
   } finally { t.cleanup() }
 })
 test('image failure falls back to profile link', async () => {
