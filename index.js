@@ -23,6 +23,10 @@ const nftService = new NFTService(rpcUrl, contractAddress);
 
 // Optional publisher shares the existing bot and polling process.
 require('./publisher').startPublisher(bot);
+// Opt-in community game; disabled by default.
+require('./lumenHunt').register(bot);
+require('./telegramLink').register(bot);
+require('./citizenCard').register(bot);
 
 console.log('Telegram NFT Bot is running...');
 
