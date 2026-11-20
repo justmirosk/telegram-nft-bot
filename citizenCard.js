@@ -4,10 +4,8 @@ const { captureCitizenCard } = require('./citizenCardCapture')
 function register(bot, capture = captureCitizenCard) {
   bot.onText(/^\/citizen(?:@\w+)?\s*$/i, async (msg) => {
     const chatId = msg.chat.id
-    if (msg.chat.type !== 'private') {
-      await bot.sendMessage(chatId, 'For your privacy, send /citizen to me in a private chat.')
-      return
-    }
+    // Group cards contain only public profile data for the requesting Telegram user.
+    // Never accept a wallet or another Telegram ID from a group command.
     const base = process.env.BEANISCROLLS_TELEGRAM_LINK_URL
     const secret = process.env.TELEGRAM_LINK_API_SECRET
     if (!base || !secret) {
