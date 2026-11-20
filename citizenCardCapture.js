@@ -1,6 +1,5 @@
 // Capture the actual BeaniScrolls React Citizen Card instead of recreating its design.
 // The browser renders the same component used by the website, with hideFrame enabled.
-const { chromium } = require('playwright-core')
 
 function renderUrl(base, wallet) {
   if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) throw new Error('Invalid citizen wallet')
@@ -13,6 +12,7 @@ function renderUrl(base, wallet) {
 }
 
 async function captureCitizenCard(base, wallet) {
+  const { chromium } = require('playwright-core')
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_EXECUTABLE_PATH || '/usr/bin/chromium',
     headless: true,
