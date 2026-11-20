@@ -75,7 +75,7 @@ test('group command publishes only requesting linked citizen public card', async
     assert.match(t.calls[0].url, /telegramUserId=123456/)
     assert.equal(t.sent[0].type, 'photo')
     assert.equal(t.sent[0].id, 88)
-    assert.match(t.sent[0].options.reply_markup.inline_keyboard[0][0].url, /beaniscrolls.com\\/citizens\\//)
+    assert.ok(t.sent[0].options.reply_markup.inline_keyboard[0][0].url.includes('beaniscrolls.com/citizens/'))
   } finally { t.cleanup() }
 })
 test('image failure falls back to profile link', async () => {
