@@ -19,13 +19,21 @@ async function captureCitizenCard(base, wallet) {
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   })
   try {
-    const page = await browser.newPage({ viewport: { width: 750, height: 1050 }, deviceScaleFactor: 1 })
+    const headers = {}
+    if (process.env.VERCEL_OIDC_TOKEN) headers['x-vercel-trusted-oidc-idp-token'] = process.env.VERCEL_OIDC_TOKEN
+    const page = await browser.newPage({
+      viewport: { width: 750, height: 1050 }, deviceScaleFactor: 1,
+      extraHTTPHeaders: headers,
+    })
     await page.goto(renderUrl(base, wallet), { waitUntil: 'domcontentloaded', timeout: 30000 })
     if (!await page.locator('img[alt="QR code linking to the public BeaniWorld profile"]').count()) {
       console.log('Citizen render diagnostic:', JSON.stringify({
         url: page.url(), title: await page.title(),
         body: (await page.locator('body').innerText()).slice(0, 300),
       }))
+    }
+    if (new URL(page.url()).hostname === 'vercel.com') {
+      throw new Error('Protected Vercel Preview requires authenticated browser access; refusing to screenshot login page')
     }
     await page.locator('main > div').first().waitFor({ state: 'visible', timeout: 30000 })
     await page.evaluate(async () => {
