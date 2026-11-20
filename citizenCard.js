@@ -53,7 +53,7 @@ function register(bot) {
       } catch (imageError) {
         console.warn('Citizen Card image unavailable:', imageError?.message || 'unknown error')
       }
-      await bot.sendMessage(chatId, '🫘 BeaniWorld Citizen\n\n' + name + '\nWallet: ' + wallet.slice(0, 6) + '…' + wallet.slice(-4) + '\n\nTo display your actual card here, open BeaniScrolls → Citizen Card and select Save Card for Telegram.', {
+      await bot.sendMessage(chatId, '🫘 BeaniWorld Citizen\n\n' + name + '\nWallet: ' + wallet.slice(0, 6) + '…' + wallet.slice(-4) + '\n\nYour card could not be generated right now. You can still open your public Citizen Profile below.', {
         reply_markup: keyboard,
         disable_web_page_preview: true,
       })
