@@ -21,6 +21,12 @@ async function captureCitizenCard(base, wallet) {
   try {
     const page = await browser.newPage({ viewport: { width: 750, height: 1050 }, deviceScaleFactor: 1 })
     await page.goto(renderUrl(base, wallet), { waitUntil: 'domcontentloaded', timeout: 30000 })
+    if (!await page.locator('img[alt="QR code linking to the public BeaniWorld profile"]').count()) {
+      console.log('Citizen render diagnostic:', JSON.stringify({
+        url: page.url(), title: await page.title(),
+        body: (await page.locator('body').innerText()).slice(0, 300),
+      }))
+    }
     await page.locator('main > div').first().waitFor({ state: 'visible', timeout: 30000 })
     await page.evaluate(async () => {
       await document.fonts.ready
