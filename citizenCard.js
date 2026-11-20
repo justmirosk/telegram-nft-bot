@@ -1,7 +1,7 @@
 const { captureCitizenCard } = require('./citizenCardCapture')
 // Read-only Citizen Profile lookup for verified Telegram accounts.
 // Does not grant privileges or expose wallet-private fields.
-function register(bot) {
+function register(bot, capture = captureCitizenCard) {
   bot.onText(/^\/citizen(?:@\w+)?\s*$/i, async (msg) => {
     const chatId = msg.chat.id
     if (msg.chat.type !== 'private') {
@@ -37,7 +37,7 @@ function register(bot) {
         // Capture the real React card. The renderer base may target Preview during testing;
         // default to the existing BeaniScrolls site when released.
         const renderBase = process.env.CITIZEN_CARD_RENDER_BASE_URL || base
-        const image = await captureCitizenCard(renderBase, wallet)
+        const image = await capture(renderBase, wallet)
         await bot.sendPhoto(chatId, image, {
           caption: '🫘 BeaniWorld Citizen Card — ' + name,
           reply_markup: keyboard,
