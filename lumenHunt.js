@@ -220,6 +220,85 @@ function leaderboard(state,week) {
   return [...users.values()].sort((a,b)=>b.lumens-a.lumens || a.firstReached.localeCompare(b.firstReached) || a.userId.localeCompare(b.userId));
 }
 function bonuses(ranks) { return ranks.map((r,i)=>({...r,bonus:[100,60,40][i]||0,total:r.lumens+([100,60,40][i]||0)})); }
+function createSync() {
+  const startWeek = process.env.LUMEN_HUNT_SYNC_START_WEEK;
+  const origin = process.env.LUMEN_HUNT_SYNC_ORIGIN;
+  const secret = process.env.LUMEN_HUNT_SYNC_SECRET;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startWeek || '') || !origin || !secret || secret.length < 32) return null;
+
+  const firstDay = new Date(startWeek + 'T00:00:00Z');
+  if (!Number.isFinite(firstDay.getTime()) || weekKey(firstDay) !== startWeek) return null;
+  let endpoint;
+  try { endpoint = new URL('/api/connected-accounts/telegram/lumen-hunt', origin); }
+  catch { return null; }
+  if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password) return null;
+
+  const nextAttempt = new Map();
+  let running = false;
+
+  function manageHunt(state, week) {
+    return week >= startWeek && !records(state, week).some(hunt => !('sync' in hunt));
+  }
+
+  async function flush() {
+    if (running) return;
+    running = true;
+    try {
+      const state = load();
+      const weeks = new Set(Object.values(state.hunts).filter(hunt => hunt.sync !== undefined).map(hunt => hunt.week));
+      const current = weekKey(new Date());
+      state.syncBonuses ??= {};
+      let changed = false;
+      for (const week of weeks) {
+        if (week >= current || Object.hasOwn(state.syncBonuses, week)) continue;
+        state.syncBonuses[week] = bonuses(leaderboard(state, week)).filter(rank => rank.bonus > 0)
+          .map(rank => ({ userId: rank.userId, amount: rank.bonus, sync: { id: crypto.randomUUID() } }));
+        changed = true;
+      }
+      if (changed) save(state);
+
+      const queue = [
+        ...Object.entries(state.hunts).filter(([, hunt]) => hunt.sync)
+          .map(([key, hunt]) => ({ key, userId: hunt.userId, amount: hunt.lumens, sync: hunt.sync })),
+        ...Object.entries(state.syncBonuses).flatMap(([week, entries]) =>
+          entries.map((entry, index) => ({ ...entry, week, index }))),
+      ];
+      const due = queue.filter(job => !job.sync.credited && (nextAttempt.get(job.sync.id) || 0) <= Date.now());
+      for (let i = 0; i < due.length; i += 4) {
+        await Promise.all(due.slice(i, i + 4).map(async job => {
+          try {
+            const response = await fetch(endpoint, {
+              method: 'POST', redirect: 'error', signal: AbortSignal.timeout(65000),
+              headers: { Authorization: 'Bearer ' + secret, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ telegramUserId: job.userId, rewardId: job.sync.id, amount: job.amount }),
+            });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const result = await response.json();
+            if (result.status === 'unlinked') {
+              nextAttempt.set(job.sync.id, Date.now() + 300000);
+              return;
+            }
+            if (result.status !== 'credited') throw new Error('Unexpected reply');
+            const latest = load();
+            const record = job.key ? latest.hunts[job.key] : latest.syncBonuses[job.week][job.index];
+            record.sync.credited = true;
+            save(latest);
+            nextAttempt.delete(job.sync.id);
+          } catch (error) {
+            nextAttempt.set(job.sync.id, Date.now() + 60000);
+            console.error('Lumen Hunt sync:', error.message);
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('Lumen Hunt queue:', error.message);
+    } finally {
+      running = false;
+    }
+  }
+  return { manageHunt, flush };
+}
+
 function register(bot) {
   // Temporary rollout diagnostic: reports the chat ID without exposing secrets.
   bot.onText(/^\/huntcheck(?:@\w+)?\s*$/, async msg => {
@@ -228,6 +307,11 @@ function register(bot) {
     await bot.sendMessage(msg.chat.id, '🔎 Lumen Hunt check\nChat ID: '+msg.chat.id+'\nConfigured group: '+(matches ? 'MATCH' : 'DIFFERENT')+'\nFeature: '+(process.env.LUMEN_HUNT_ENABLED === 'true' ? 'enabled' : 'disabled'));
   });
   if(process.env.LUMEN_HUNT_ENABLED !== 'true') return;
+  const sync = createSync();
+  if (sync) {
+    setInterval(() => void sync.flush(), 30000).unref();
+    void sync.flush();
+  }
   const inGroup = msg => ['group','supergroup'].includes(msg.chat.type) && GROUP_IDS.has(String(msg.chat.id));
   bot.onText(/^\/bwhunt(?:@\w+)?\s*$/,async msg=>{
     if(!inGroup(msg)) return;
@@ -243,16 +327,26 @@ function register(bot) {
     const [prefix,day,userId,choice]=q.data.split(':');
     if(!PATHS[choice] || String(q.from.id)!==userId) return bot.answerCallbackQuery(q.id,{text:'This adventure belongs to another hunter.',show_alert:true});
     if(!q.message || !inGroup(q.message)) return bot.answerCallbackQuery(q.id,{text:'Use /bwhunt in the group.'});
-    if(day!==dateKey(new Date())) return bot.answerCallbackQuery(q.id,{text:'This adventure has expired. Use /bwhunt again.'});
+    const now = new Date();
+    if(day!==dateKey(now)) return bot.answerCallbackQuery(q.id,{text:'This adventure has expired. Use /bwhunt again.'});
     const state=load(), key=userId+':'+day;
     if(state.hunts[key]) return bot.answerCallbackQuery(q.id,{text:'You have already hunted today!'});
     const lumens=roll(PATHS[choice].weights), lines=STORIES[choice][lumens];
     const story=lines[crypto.randomInt(lines.length)];
-    state.hunts[key]={userId,name:displayName(q.from),day,week:weekKey(new Date()),path:choice,lumens,at:new Date().toISOString()};
+    const huntWeek = weekKey(now);
+    const managed = records(state, huntWeek).some(hunt => hunt.sync !== undefined) || sync?.manageHunt(state, huntWeek);
+    state.hunts[key]={userId,name:displayName(q.from),day,week:huntWeek,path:choice,lumens,at:now.toISOString()};
+    if (managed) {
+      state.hunts[key].sync = lumens ? { id: crypto.randomUUID() } : null;
+    }
     save(state);
-    const weekly=leaderboard(state,weekKey(new Date())).find(x=>x.userId===String(userId)).lumens;
+    if (state.hunts[key].sync) void sync?.flush();
+    const creditNote = state.hunts[key].sync
+      ? ' · Credits automatically after linking Telegram in BeaniScrolls'
+      : lumens ? ' (pending manual credit)' : '';
+    const weekly=leaderboard(state,huntWeek).find(x=>x.userId===String(userId)).lumens;
     try { await bot.answerCallbackQuery(q.id,{text:'Adventure complete!'}); } catch(e) { console.error('Hunt callback acknowledgement:',e.message); }
-    await bot.editMessageText('⚔️ '+displayName(q.from)+' entered '+PATHS[choice].title+'!\n\n'+story+'\n\n✨ +'+lumens+' Lumens discovered!\n📊 Weekly total: '+weekly+' Lumens (pending credit)',{chat_id:q.message.chat.id,message_id:q.message.message_id});
+    await bot.editMessageText('⚔️ '+displayName(q.from)+' entered '+PATHS[choice].title+'!\n\n'+story+'\n\n✨ +'+lumens+' Lumens discovered!\n📊 Weekly total: '+weekly+' Lumens'+creditNote,{chat_id:q.message.chat.id,message_id:q.message.message_id});
   });
   bot.onText(/^\/(?:lboard|myscore|huntstats)(?:@\w+)?\s*$/,async msg=>{
     if(!inGroup(msg)) return;
@@ -268,7 +362,18 @@ function register(bot) {
     if(!ADMIN_IDS.has(String(msg.from.id))) return;
     if(msg.chat.type!=='private') return bot.sendMessage(msg.chat.id,'For privacy, use /huntadmin in a private chat with the bot.');
     const week=match[1]||weekKey(new Date()), state=load(), ranks=bonuses(leaderboard(state,week));
-    const lines=ranks.map((r,i)=>[(i+1),r.userId,r.name,r.lumens,r.bonus,r.total,state.payouts[week+':'+r.userId]||'PENDING'].join(' | '));
+    const hunts = records(state, week);
+    const managed = hunts.some(hunt => hunt.sync !== undefined);
+    const lines = ranks.map((r, i) => {
+      let status = state.payouts[week + ':' + r.userId] || 'PENDING';
+      if (managed) {
+        const dailyPending = hunts.some(hunt => hunt.userId === r.userId && hunt.sync && !hunt.sync.credited);
+        const bonus = state.syncBonuses?.[week]?.find(entry => entry.userId === r.userId);
+        const bonusPending = r.bonus > 0 && !bonus?.sync.credited;
+        status = dailyPending || bonusPending ? 'AUTO SYNC PENDING' : 'AUTO CREDITED';
+      }
+      return [i + 1, r.userId, r.name, r.lumens, r.bonus, r.total, status].join(' | ');
+    });
     const report='Week '+week+'\nRank | Telegram ID | Name | Found | Bonus | Total | Status\n'+(lines.join('\n')||'No hunts');
     for(let i=0;i<report.length;i+=3500) await bot.sendMessage(msg.chat.id,report.slice(i,i+3500));
   });
@@ -277,6 +382,9 @@ function register(bot) {
     const [_,week,userId]=match;
     if(week>=weekKey(new Date())) return bot.sendMessage(msg.chat.id,'Only closed weeks can be marked credited.');
     const state=load();
+    if (records(state, week).some(hunt => hunt.sync !== undefined)) {
+      return bot.sendMessage(msg.chat.id, 'This week uses automatic BeaniScrolls credits. Use /huntadmin to check sync status.');
+    }
     if(!leaderboard(state,week).some(r=>r.userId===userId)) return bot.sendMessage(msg.chat.id,'No hunter found in that week.');
     const key=week+':'+userId;
     if(state.payouts[key]) return bot.sendMessage(msg.chat.id,'Already marked credited.');
