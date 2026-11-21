@@ -228,7 +228,9 @@ function createSync() {
 
   const firstDay = new Date(startWeek + 'T00:00:00Z');
   if (!Number.isFinite(firstDay.getTime()) || weekKey(firstDay) !== startWeek) return null;
-  const endpoint = new URL('/api/connected-accounts/telegram/lumen-hunt', origin);
+  let endpoint;
+  try { endpoint = new URL('/api/connected-accounts/telegram/lumen-hunt', origin); }
+  catch { return null; }
   if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password) return null;
 
   const nextAttempt = new Map();
@@ -248,7 +250,7 @@ function createSync() {
       state.syncBonuses ??= {};
       let changed = false;
       for (const week of weeks) {
-        if (week >= current || !manageHunt(state, week) || Object.hasOwn(state.syncBonuses, week)) continue;
+        if (week >= current || Object.hasOwn(state.syncBonuses, week)) continue;
         state.syncBonuses[week] = bonuses(leaderboard(state, week)).filter(rank => rank.bonus > 0)
           .map(rank => ({ userId: rank.userId, amount: rank.bonus, sync: { id: crypto.randomUUID() } }));
         changed = true;
@@ -325,23 +327,24 @@ function register(bot) {
     const [prefix,day,userId,choice]=q.data.split(':');
     if(!PATHS[choice] || String(q.from.id)!==userId) return bot.answerCallbackQuery(q.id,{text:'This adventure belongs to another hunter.',show_alert:true});
     if(!q.message || !inGroup(q.message)) return bot.answerCallbackQuery(q.id,{text:'Use /bwhunt in the group.'});
-    if(day!==dateKey(new Date())) return bot.answerCallbackQuery(q.id,{text:'This adventure has expired. Use /bwhunt again.'});
+    const now = new Date();
+    if(day!==dateKey(now)) return bot.answerCallbackQuery(q.id,{text:'This adventure has expired. Use /bwhunt again.'});
     const state=load(), key=userId+':'+day;
     if(state.hunts[key]) return bot.answerCallbackQuery(q.id,{text:'You have already hunted today!'});
     const lumens=roll(PATHS[choice].weights), lines=STORIES[choice][lumens];
     const story=lines[crypto.randomInt(lines.length)];
-    const huntWeek = weekKey(new Date());
-    const managed = sync?.manageHunt(state, huntWeek);
-    state.hunts[key]={userId,name:displayName(q.from),day,week:huntWeek,path:choice,lumens,at:new Date().toISOString()};
+    const huntWeek = weekKey(now);
+    const managed = records(state, huntWeek).some(hunt => hunt.sync !== undefined) || sync?.manageHunt(state, huntWeek);
+    state.hunts[key]={userId,name:displayName(q.from),day,week:huntWeek,path:choice,lumens,at:now.toISOString()};
     if (managed) {
       state.hunts[key].sync = lumens ? { id: crypto.randomUUID() } : null;
     }
     save(state);
-    if (state.hunts[key].sync) void sync.flush();
+    if (state.hunts[key].sync) void sync?.flush();
     const creditNote = state.hunts[key].sync
       ? ' · Credits automatically after linking Telegram in BeaniScrolls'
-      : ' (pending credit)';
-    const weekly=leaderboard(state,weekKey(new Date())).find(x=>x.userId===String(userId)).lumens;
+      : lumens ? ' (pending manual credit)' : '';
+    const weekly=leaderboard(state,huntWeek).find(x=>x.userId===String(userId)).lumens;
     try { await bot.answerCallbackQuery(q.id,{text:'Adventure complete!'}); } catch(e) { console.error('Hunt callback acknowledgement:',e.message); }
     await bot.editMessageText('⚔️ '+displayName(q.from)+' entered '+PATHS[choice].title+'!\n\n'+story+'\n\n✨ +'+lumens+' Lumens discovered!\n📊 Weekly total: '+weekly+' Lumens'+creditNote,{chat_id:q.message.chat.id,message_id:q.message.message_id});
   });
