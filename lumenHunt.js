@@ -35,7 +35,8 @@ const STORIES = {
       "A spirit rewarded you for not touching the suspicious red button.",
       "You found ten Lumens behind a sign reading 'Definitely No Lumens'.",
       "The shrine's accountant made a rounding error in your favour.",
-      "A dusty scroll said 'Congratulations, mediocre hero.'"
+      "A dusty scroll said 'Congratulations, mediocre hero.'",
+      "Gravetread stepped on a grave beside the shrine, and a voice underneath said, “Again? I work nights.” The Beast tiptoed away. You gathered the Lumens it had shaken loose and whispered, “Sorry about the noise.” The voice said, “You can be sorry on your own grave.”"
     ],
     "25": [
       "Four crystals shimmered. One dropped a little gift into your pocket.",
@@ -47,7 +48,8 @@ const STORIES = {
       "A choir of ghosts sang your name. One dropped a purse.",
       "JokerBeany tried to pick your pocket and accidentally filled it.",
       "The Weaver's lantern lit a secret compartment marked 'Emergency Snacks'.",
-      "A sleepy oracle predicted 25 Lumens. For once, the oracle was useful."
+      "A sleepy oracle predicted 25 Lumens. For once, the oracle was useful.",
+      "Hushstitch offered to mend your cloak at the shrine. You found Lumens sewn into the lining and a note in the pocket that read: Try to die in this one. I’m entering it in a competition."
     ],
     "50": [
       "A rare blessing lit up the entire shrine!",
@@ -85,7 +87,9 @@ const STORIES = {
       "A sleepy sprite rewarded you for not waking its boss.",
       "You found a tiny treasure chest inside a larger, emptier chest.",
       "A forest spirit traded Lumens for your worst joke.",
-      "A raven dropped ten Lumens and demanded a five-star review."
+      "A raven dropped ten Lumens and demanded a five-star review.",
+      "Reedreaper cut the ferry rope to stop you escaping. You were on the bank. You pocketed the Lumens from the ticket booth and watched it drift away on the last ferry.",
+      "Wickwing blew out the candles at a memorial. The mourners gasped. You gathered the Lumens that fell from the wicks while a voice from inside the coffin said, “Thank you. I was trying to sleep.”"
     ],
     "25": [
       "A hollow log held a surprising stash.",
@@ -97,7 +101,9 @@ const STORIES = {
       "You beat JokerBeany at hide-and-seek. He was behind the only tree.",
       "A fox offered you a mysterious contract. The fine print was surprisingly fair.",
       "The forest council awarded you Lumens for outstanding nonsense.",
-      "You found a forgotten druid's purse. It was labelled 'Definitely Not Thornvail'."
+      "You found a forgotten druid's purse. It was labelled 'Definitely Not Thornvail'.",
+      "You tossed a coin into the wishing well and asked for Lumens. Ashquill dropped a burning feather down after it. The bucket came back full of glowing shards and a note from the well keeper that read: Please wish for rain.",
+      "You picked up a glowing egg, and it called you Dad. You put it back. Broodfang slid you a pile of Lumens and handed you another egg. Apparently you’d just passed the babysitting interview."
     ],
     "50": [
       "An enchanted grove revealed a secret vault.",
@@ -145,7 +151,9 @@ const STORIES = {
       "You negotiated a refund from a cursed vending machine.",
       "A bat dropped ten Lumens. It refuses to discuss where they came from.",
       "A stone guardian charged a toll, then gave you change.",
-      "You discovered a tiny vault behind an enormous warning sign."
+      "You discovered a tiny vault behind an enormous warning sign.",
+      "Marrowcoil tried to sneak up behind you. Its knees cracked. Yours cracked when you turned around. You nodded at each other and split the Lumens.",
+      "Kilnwarden handed you a clay urn with your name on it. “Bit early,” you said. It turned the urn around. The other side said Tip Jar. You dropped in a coin, and it paid you your change in Lumens."
     ],
     "25": [
       "A glowing tunnel led you to a hidden cache.",
@@ -156,7 +164,9 @@ const STORIES = {
       "A cursed helmet whispered winning lottery numbers from last week.",
       "You found twenty-five Lumens in a monster's emergency lunchbox.",
       "The cave accountant had been dead for centuries. The books still balanced.",
-      "JokerBeany set a trap and forgot which side he was standing on."
+      "JokerBeany set a trap and forgot which side he was standing on.",
+      "Veilmaw called from the dark in your voice. “I know a shortcut.” You recognised the tone you use just before getting everyone lost, went the other way, and found Lumens by the exit.",
+      "Drownwake drained the pool, revealing Lumens, six boots and a sign that read: Please swim in pairs. You took the Lumens. All six boots were left ones."
     ],
     "50": [
       "You outsmarted a cave guardian and claimed its treasure.",
