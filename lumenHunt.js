@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const DATA_FILE = process.env.LUMEN_HUNT_DATA_FILE || '/data/lumen-hunt.json';
 const GROUP_IDS = new Set((process.env.LUMEN_HUNT_GROUP_ID || '').split(',').map(id => id.trim()).filter(Boolean));
 const ADMIN_IDS = new Set((process.env.LUMEN_HUNT_ADMIN_IDS || '').split(',').map(s => s.trim()).filter(Boolean));
+const REWARD_OWNER_ID = (process.env.BW_REWARD_OWNER_ID || '').trim();
 const PATHS = {
   shrine: { title: '💎 Ancient Shrine', weights: [[0,10],[10,50],[25,30],[50,10]] },
   forest: { title: '🌲 Whispering Forest', weights: [[0,25],[10,25],[25,30],[50,15],[100,5]] },
@@ -229,6 +230,26 @@ function leaderboard(state,week) {
   }
   return [...users.values()].sort((a,b)=>b.lumens-a.lumens || a.firstReached.localeCompare(b.firstReached) || a.userId.localeCompare(b.userId));
 }
+function tournamentTotal(state, week, userId) {
+  return Object.values(state.tournamentRewards || {})
+    .filter(reward => reward.week === week && reward.userId === userId)
+    .reduce((sum, reward) => sum + reward.lumens, 0);
+}
+function payoutRows(state, week) {
+  const rows = bonuses(leaderboard(state, week)).map((row, index) => ({ ...row, rank: index + 1, tournament: 0 }));
+  const byUser = new Map(rows.map(row => [row.userId, row]));
+  for (const reward of Object.values(state.tournamentRewards || {})) {
+    if (reward.week !== week) continue;
+    let row = byUser.get(reward.userId);
+    if (!row) {
+      row = { userId: reward.userId, name: reward.name, lumens: 0, bonus: 0, tournament: 0, total: 0 };
+      byUser.set(reward.userId, row);
+    }
+    row.tournament += reward.lumens;
+    row.total += reward.lumens;
+  }
+  return [...byUser.values()];
+}
 function bonuses(ranks) { return ranks.map((r,i)=>({...r,bonus:[100,60,40][i]||0,total:r.lumens+([100,60,40][i]||0)})); }
 function register(bot) {
   // Temporary rollout diagnostic: reports the chat ID without exposing secrets.
@@ -246,6 +267,39 @@ function register(bot) {
     await bot.sendMessage(msg.chat.id,'🗺️ '+displayName(msg.from)+', choose your daily adventure:',{
       reply_markup:{inline_keyboard:Object.entries(PATHS).map(([key,p])=>[{text:p.title,callback_data:'lh:'+today+':'+msg.from.id+':'+key}])}
     });
+  });
+  bot.onText(/^\/bwreward(?:@\w+)?(?:[ \t]+(.*))?$/, async (msg, match) => {
+    if (!/^[1-9]\d*$/.test(REWARD_OWNER_ID) || String(msg.from?.id) !== REWARD_OWNER_ID || msg.sender_chat) return;
+    if (!inGroup(msg) && msg.chat.type !== 'private') return;
+
+    const reply = msg.reply_to_message;
+    const args = match[1]?.trim() || '';
+    const recipient = reply?.from;
+    const replyAmount = /^([1-9]\d*)$/.exec(args);
+    const direct = /^([1-9]\d*)[ \t]+([1-9]\d*)$/.exec(args);
+    const userId = reply ? String(recipient?.id) : direct?.[1];
+    const amount = Number(reply ? replyAmount?.[1] : direct?.[2]);
+    if (!/^[1-9]\d*$/.test(userId || '') || !Number.isSafeInteger(Number(userId)) ||
+        !Number.isSafeInteger(amount) || amount <= 0 || recipient?.is_bot || reply?.sender_chat ||
+        (!reply && msg.chat.type !== 'private')) {
+      return bot.sendMessage(msg.chat.id, 'Reply to a player’s message with /bwreward 25, or use /bwreward TELEGRAM_ID 25 in a private chat.');
+    }
+
+    const now = new Date(), week = weekKey(now), key = msg.chat.id + ':' + msg.message_id;
+    const state = load();
+    state.tournamentRewards ||= {};
+    if (Object.hasOwn(state.tournamentRewards, key)) {
+      return bot.sendMessage(msg.chat.id, 'This tournament reward was already recorded.');
+    }
+    const name = recipient ? displayName(recipient) : leaderboard(state, week).find(row => row.userId === userId)?.name || 'Telegram user ' + userId;
+    const total = tournamentTotal(state, week, userId) + amount;
+    const payout = payoutRows(state, week).find(row => row.userId === userId)?.total || 0;
+    if (!Number.isSafeInteger(total) || !Number.isSafeInteger(payout + amount)) {
+      return bot.sendMessage(msg.chat.id, 'That amount is too large.');
+    }
+    state.tournamentRewards[key] = { userId, name, week, lumens: amount, at: now.toISOString() };
+    save(state);
+    return bot.sendMessage(msg.chat.id, '🏆 Recorded ' + amount + ' tournament Lumens for ' + name + '. Weekly tournament total: ' + total + ' Lumens (pending BeaniScrolls credit).');
   });
   // Serialize callbacks within the single Node.js process before any await.
   bot.on('callback_query',async q=>{
@@ -266,10 +320,11 @@ function register(bot) {
   });
   bot.onText(/^\/(?:lboard|myscore|huntstats)(?:@\w+)?\s*$/,async msg=>{
     if(!inGroup(msg)) return;
-    const command=msg.text.split('@')[0].trim().split(/\s/)[0], week=weekKey(new Date()), ranks=leaderboard(load(),week);
+    const command=msg.text.split('@')[0].trim().split(/\s/)[0], week=weekKey(new Date()), state=load(), ranks=leaderboard(state,week);
     if(command==='/myscore') {
       const mine=ranks.find(r=>r.userId===String(msg.from.id));
-      return bot.sendMessage(msg.chat.id,'💎 '+displayName(msg.from)+': '+(mine?.lumens||0)+' Lumens discovered this week.');
+      const rewards = tournamentTotal(state, week, String(msg.from.id));
+      return bot.sendMessage(msg.chat.id,'💎 '+displayName(msg.from)+': '+(mine?.lumens||0)+' Lumens discovered this week.' + (rewards ? '\n🏆 Tournament rewards: '+rewards+' Lumens (pending credit).' : ''));
     }
     if(command==='/huntstats') return bot.sendMessage(msg.chat.id,'🌍 Lumen Hunt · '+week+'\nHunters: '+ranks.length+'\nLumens discovered: '+ranks.reduce((s,r)=>s+r.lumens,0));
     return bot.sendMessage(msg.chat.id,'🏆 Lumen Hunt · week of '+week+'\n'+(ranks.slice(0,10).map((r,i)=>(i+1)+'. '+r.name+' — '+r.lumens+' Lumens').join('\n')||'No hunts yet!'));
@@ -277,9 +332,9 @@ function register(bot) {
   bot.onText(/^\/huntadmin(?:@\w+)?(?:\s+(\d{4}-\d{2}-\d{2}))?\s*$/,async(msg,match)=>{
     if(!ADMIN_IDS.has(String(msg.from.id))) return;
     if(msg.chat.type!=='private') return bot.sendMessage(msg.chat.id,'For privacy, use /huntadmin in a private chat with the bot.');
-    const week=match[1]||weekKey(new Date()), state=load(), ranks=bonuses(leaderboard(state,week));
-    const lines=ranks.map((r,i)=>[(i+1),r.userId,r.name,r.lumens,r.bonus,r.total,state.payouts[week+':'+r.userId]||'PENDING'].join(' | '));
-    const report='Week '+week+'\nRank | Telegram ID | Name | Found | Bonus | Total | Status\n'+(lines.join('\n')||'No hunts');
+    const week=match[1]||weekKey(new Date()), state=load(), ranks=payoutRows(state,week);
+    const lines=ranks.map(r=>[r.rank ?? '—',r.userId,r.name,r.lumens,r.bonus,r.tournament,r.total,state.payouts[week+':'+r.userId]||'PENDING'].join(' | '));
+    const report='Week '+week+'\nRank | Telegram ID | Name | Found | Bonus | Tournament | Total | Status\n'+(lines.join('\n')||'No hunts');
     for(let i=0;i<report.length;i+=3500) await bot.sendMessage(msg.chat.id,report.slice(i,i+3500));
   });
   bot.onText(/^\/huntpaid(?:@\w+)?\s+(\d{4}-\d{2}-\d{2})\s+(\d+)\s*$/,async(msg,match)=>{
@@ -287,7 +342,7 @@ function register(bot) {
     const [_,week,userId]=match;
     if(week>=weekKey(new Date())) return bot.sendMessage(msg.chat.id,'Only closed weeks can be marked credited.');
     const state=load();
-    if(!leaderboard(state,week).some(r=>r.userId===userId)) return bot.sendMessage(msg.chat.id,'No hunter found in that week.');
+    if(!payoutRows(state,week).some(r=>r.userId===userId)) return bot.sendMessage(msg.chat.id,'No hunter found in that week.');
     const key=week+':'+userId;
     if(state.payouts[key]) return bot.sendMessage(msg.chat.id,'Already marked credited.');
     state.payouts[key]='CREDITED';save(state);
