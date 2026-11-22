@@ -30,6 +30,40 @@ require('./citizenCard').register(bot);
 
 console.log('Telegram NFT Bot is running...');
 
+bot.onText(/^\/tribelumens(?:@\w+)?\s*$/i, async (msg) => {
+  const tribes = [
+    ['avira', '🔴 Avarai'],
+    ['polaris', '🟣 Polarim'],
+    ['binara', '🟡 Binarai'],
+    ['solara', '🟢 Solarim'],
+  ];
+  const baseUrl = process.env.BEANISCROLLS_URL || 'https://beaniscrolls.com';
+  let message;
+
+  try {
+    const response = await fetch(new URL('/api/tribes/lumens', baseUrl), {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) throw new Error('Tribe Lumens request failed');
+
+    const { totals } = await response.json();
+    const balances = tribes.map(([id, name]) => {
+      const total = totals?.[id];
+      if (!Number.isSafeInteger(total)) throw new Error('Invalid Tribe Lumen total');
+      return name + ' · ' + total.toLocaleString('en-IE');
+    });
+    message = ['✨ Tribe Lumen Balances', 'All-time totals on BeaniScrolls', '', ...balances].join('\n');
+  } catch {
+    message = 'Tribe Lumen balances are temporarily unavailable. Please try again later.';
+  }
+
+  try {
+    await bot.sendMessage(msg.chat.id, message);
+  } catch (error) {
+    console.error('Error replying to /tribelumens:', error.message);
+  }
+});
+
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
 
@@ -40,6 +74,7 @@ bot.onText(/\/start/, async (msg) => {
       chatId,
       `Welcome to the ${collectionName} NFT Bot!\n\n` +
       `Available commands:\n` +
+      `/tribelumens - Show all four Tribe Lumen balances\n` +
       `/random - Show a random NFT from the collection\n` +
       `/showID <number> - Show a specific NFT by ID\n\n` +
       `Contract: ${contractAddress}`
