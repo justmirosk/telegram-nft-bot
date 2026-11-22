@@ -1,7 +1,10 @@
 require('dotenv').config();
+const { join } = require('node:path');
 const TelegramBot = require('node-telegram-bot-api');
 const NFTService = require('./nftService');
 const { getTribeLine, detailUrl } = require('./tribeService');
+
+const tribeFlagsPath = join(__dirname, 'assets', 'tribe-lumen-flags.jpg');
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const contractAddress = process.env.NFT_CONTRACT_ADDRESS;
@@ -55,6 +58,13 @@ bot.onText(/^\/tribelumens(?:@\w+)?\s*$/i, async (msg) => {
     message = ['✨ Tribe Lumen Balances', 'All-time totals on BeaniScrolls', '', ...balances].join('\n');
   } catch {
     message = 'Tribe Lumen balances are temporarily unavailable. Please try again later.';
+  }
+
+  try {
+    await bot.sendPhoto(msg.chat.id, tribeFlagsPath, { caption: message });
+    return;
+  } catch (error) {
+    console.error('Error attaching Tribe flags:', error.message);
   }
 
   try {
