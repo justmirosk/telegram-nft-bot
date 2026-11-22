@@ -218,12 +218,12 @@ function roll(weights) {
 function displayName(user) {
   return user.username ? '@'+user.username : [user.first_name,user.last_name].filter(Boolean).join(' ') || 'Hunter';
 }
-function records(state,week) {
-  return Object.values(state.hunts).filter(h=>h.week===week).sort((a,b)=>a.at.localeCompare(b.at));
-}
-function leaderboard(state,week) {
+function leaderboard(state, week, includeTournamentRewards = false) {
+  const events = Object.values(state.hunts);
+  if (includeTournamentRewards) events.push(...Object.values(state.tournamentRewards || {}));
+  const weeklyEvents = events.filter(event => event.week === week).sort((a, b) => a.at.localeCompare(b.at));
   const users = new Map();
-  for(const h of records(state,week)) {
+  for(const h of weeklyEvents) {
     const id=String(h.userId);
     const u=users.get(id)||{userId:id,name:h.name,lumens:0,firstReached:''};
     u.name=h.name; u.lumens+=h.lumens; u.firstReached=h.at; users.set(id,u);
@@ -327,7 +327,8 @@ function register(bot) {
       return bot.sendMessage(msg.chat.id,'💎 '+displayName(msg.from)+': '+(mine?.lumens||0)+' Lumens discovered this week.' + (rewards ? '\n🏆 Tournament rewards: '+rewards+' Lumens (pending credit).' : ''));
     }
     if(command==='/huntstats') return bot.sendMessage(msg.chat.id,'🌍 Lumen Hunt · '+week+'\nHunters: '+ranks.length+'\nLumens discovered: '+ranks.reduce((s,r)=>s+r.lumens,0));
-    return bot.sendMessage(msg.chat.id,'🏆 Lumen Hunt · week of '+week+'\n'+(ranks.slice(0,10).map((r,i)=>(i+1)+'. '+r.name+' — '+r.lumens+' Lumens').join('\n')||'No hunts yet!'));
+    const weeklyTotals = leaderboard(state, week, true);
+    return bot.sendMessage(msg.chat.id,'🏆 Weekly Lumens · week of '+week+'\nHunts + tournament rewards · Hunt bonuses based on hunts\n'+(weeklyTotals.slice(0,10).map((r,i)=>(i+1)+'. '+r.name+' — '+r.lumens+' Lumens').join('\n')||'No Lumens recorded yet!'));
   });
   bot.onText(/^\/huntadmin(?:@\w+)?(?:\s+(\d{4}-\d{2}-\d{2}))?\s*$/,async(msg,match)=>{
     if(!ADMIN_IDS.has(String(msg.from.id))) return;
