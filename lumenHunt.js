@@ -251,6 +251,67 @@ function payoutRows(state, week) {
   return [...byUser.values()];
 }
 function bonuses(ranks) { return ranks.map((r,i)=>({...r,bonus:[100,60,40][i]||0,total:r.lumens+([100,60,40][i]||0)})); }
+function startRewardSync() {
+  const origin = process.env.LUMEN_HUNT_SYNC_ORIGIN;
+  const secret = process.env.LUMEN_HUNT_SYNC_SECRET;
+  if (!origin && !secret) return () => {};
+  if (!secret || secret.length < 32 || ![
+    'https://gems-testnet.beaniscrolls.site',
+    'https://www.beaniscrolls.com',
+  ].includes(origin)) {
+    console.error('Lumen Hunt reward sync configuration is incomplete or invalid.');
+    return () => {};
+  }
+
+  const endpoint = origin + '/api/connected-accounts/telegram/lumen-hunt';
+  let running = false;
+
+  async function flushRewards() {
+    if (running) return;
+    running = true;
+    try {
+      const now = Date.now();
+      const pending = Object.entries(load().hunts)
+        .filter(([, hunt]) => hunt.sync?.status === 'pending' && hunt.sync.nextAttempt <= now)
+        .slice(0, 10);
+      for (const [key, hunt] of pending) {
+        let status;
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            redirect: 'error',
+            headers: { Authorization: 'Bearer ' + secret, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              telegramUserId: String(hunt.userId),
+              rewardId: hunt.sync.rewardId,
+              amount: hunt.lumens,
+            }),
+            signal: AbortSignal.timeout(65000),
+          });
+          if (response.ok) ({ status } = await response.json());
+          else console.error('Lumen Hunt reward sync HTTP status:', response.status);
+        } catch {
+          console.error('Lumen Hunt reward sync request failed.');
+        }
+        const state = load();
+        const sync = state.hunts[key]?.sync;
+        if (sync?.rewardId !== hunt.sync.rewardId) continue;
+        if (status === 'credited') sync.status = 'credited';
+        else sync.nextAttempt = Date.now() + (status === 'unlinked' ? 15 : 1) * 60_000;
+        save(state);
+      }
+    } catch {
+      console.error('Lumen Hunt reward sync could not read or save its delivery state.');
+    } finally {
+      running = false;
+    }
+  }
+
+  setInterval(() => void flushRewards(), 60_000).unref();
+  void flushRewards();
+  return () => void flushRewards();
+}
+
 function register(bot) {
   // Temporary rollout diagnostic: reports the chat ID without exposing secrets.
   bot.onText(/^\/huntcheck(?:@\w+)?\s*$/, async msg => {
@@ -259,6 +320,7 @@ function register(bot) {
     await bot.sendMessage(msg.chat.id, '🔎 Lumen Hunt check\nChat ID: '+msg.chat.id+'\nConfigured group: '+(matches ? 'MATCH' : 'DIFFERENT')+'\nFeature: '+(process.env.LUMEN_HUNT_ENABLED === 'true' ? 'enabled' : 'disabled'));
   });
   if(process.env.LUMEN_HUNT_ENABLED !== 'true') return;
+  const syncRewards = startRewardSync();
   const inGroup = msg => ['group','supergroup'].includes(msg.chat.type) && GROUP_IDS.has(String(msg.chat.id));
   bot.onText(/^\/bwhunt(?:@\w+)?\s*$/,async msg=>{
     if(!inGroup(msg)) return;
@@ -313,7 +375,9 @@ function register(bot) {
     const lumens=roll(PATHS[choice].weights), lines=STORIES[choice][lumens];
     const story=lines[crypto.randomInt(lines.length)];
     state.hunts[key]={userId,name:displayName(q.from),day,week:weekKey(new Date()),path:choice,lumens,at:new Date().toISOString()};
+    if (lumens > 0) state.hunts[key].sync = { rewardId: crypto.randomUUID(), status: 'pending', nextAttempt: 0 };
     save(state);
+    syncRewards();
     const weekly=leaderboard(state,weekKey(new Date())).find(x=>x.userId===String(userId)).lumens;
     try { await bot.answerCallbackQuery(q.id,{text:'Adventure complete!'}); } catch(e) { console.error('Hunt callback acknowledgement:',e.message); }
     await bot.editMessageText('⚔️ '+displayName(q.from)+' entered '+PATHS[choice].title+'!\n\n'+story+'\n\n✨ +'+lumens+' Lumens discovered!\n📊 Weekly total: '+weekly+' Lumens (pending credit)',{chat_id:q.message.chat.id,message_id:q.message.message_id});
