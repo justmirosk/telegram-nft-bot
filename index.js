@@ -2,6 +2,8 @@ require('dotenv').config();
 const { join } = require('node:path');
 const TelegramBot = require('node-telegram-bot-api');
 const NFTService = require('./nftService');
+const lumenHunt = require('./lumenHunt');
+const { registerCommandMenu } = require('./commandMenu');
 const { getTribeLine, detailUrl } = require('./tribeService');
 
 const tribeFlagsPath = join(__dirname, 'assets', 'tribe-lumen-flags.jpg');
@@ -27,9 +29,10 @@ const nftService = new NFTService(rpcUrl, contractAddress);
 // Optional publisher shares the existing bot and polling process.
 require('./publisher').startPublisher(bot);
 // Opt-in community game; disabled by default.
-require('./lumenHunt').register(bot);
+lumenHunt.register(bot);
 require('./telegramLink').register(bot);
 require('./citizenCard').register(bot);
+void registerCommandMenu(bot, lumenHunt.GROUP_IDS);
 
 console.log('Telegram NFT Bot is running...');
 
@@ -86,7 +89,7 @@ bot.onText(/\/start/, async (msg) => {
       `Available commands:\n` +
       `/tribelumens - Show all four Tribe Lumen balances\n` +
       `/random - Show a random NFT from the collection\n` +
-      `/showID <number> - Show a specific NFT by ID\n\n` +
+      `/showid <number> - Show a specific NFT by ID\n\n` +
       `Contract: ${contractAddress}`
     );
   } catch (error) {
@@ -163,12 +166,12 @@ bot.onText(/\/random/, async (msg) => {
   }
 });
 
-bot.onText(/\/showID (.+)/, async (msg, match) => {
+bot.onText(/^\/showid(?:@\w+)?(?:[ \t]+([^\r\n]*))?\s*$/i, async (msg, match) => {
   const chatId = msg.chat.id;
-  const nftNumber = match[1].trim();
+  const nftNumber = (match[1] || '').trim();
 
   if (!/^\d+$/.test(nftNumber)) {
-    return bot.sendMessage(chatId, 'Please provide a valid numeric NFT number.\nExample: /showID 123');
+    return bot.sendMessage(chatId, 'Please provide a valid numeric NFT number.\nExample: /showid 123');
   }
 
   try {
@@ -176,7 +179,7 @@ bot.onText(/\/showID (.+)/, async (msg, match) => {
     const tokenId = userInput - 1;
 
     if (tokenId < 0) {
-      return bot.sendMessage(chatId, 'NFT numbers start from 1. Please provide a number >= 1.\nExample: /showID 1');
+      return bot.sendMessage(chatId, 'NFT numbers start from 1. Please provide a number >= 1.\nExample: /showid 1');
     }
 
     await bot.sendMessage(chatId, `Fetching NFT #${userInput}...`);

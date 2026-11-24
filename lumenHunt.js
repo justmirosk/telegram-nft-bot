@@ -485,4 +485,4 @@ function register(bot) {
     return bot.sendMessage(msg.chat.id,'Marked credited for '+userId+' in week '+week+'. This does not transfer Lumens.');
   });
 }
-module.exports={register,PATHS,weekKey,leaderboard,bonuses,roll};
+module.exports={register,GROUP_IDS,PATHS,weekKey,leaderboard,bonuses,roll};
