@@ -518,3 +518,27 @@ test('new stepped raids apply armor to the four damage rolls and keep existing r
     engine.close()
   }
 })
+
+test('live raids keep accepting hits after six, with a cooldown after the sixth hit', () => {
+  let clock = 0
+  const engine = openBossRaid(':memory:', { live: true, now: () => clock, roll: () => 0 })
+  try {
+    const wallet = walletOf('51')
+    engine.launch({ id: 'live-unlimited', chat, topic, post: '20', closes: 3600000, openingBlock: '42', hp: 2400, beast: '8', lumens: 200 })
+    const attack = { chat, topic, post: '20', player: '51' }
+    const proof = { token: '77', wallet, confirmedOwner: wallet, openingBlock: '42', confirmedBlock: '43', tribe: 'polaris' }
+    assert.equal(engine.attack({ ...attack, message: '1', evidence: proof }).status, 'accepted')
+    for (let hit = 2; hit <= 6; hit++) {
+      clock += 120000
+      const result = engine.attack({ ...attack, message: String(hit) })
+      assert.equal(result.status, 'accepted')
+      assert.equal(result.nextAt, clock + 120000)
+    }
+    assert.equal(engine.attack({ ...attack, message: 'early' }).status, 'cooldown')
+    clock += 120000
+    assert.equal(engine.attack({ ...attack, message: '7' }).status, 'accepted')
+    assert.equal(engine.entrant('live-unlimited', '51').hits, 7)
+  } finally {
+    engine.close()
+  }
+})
