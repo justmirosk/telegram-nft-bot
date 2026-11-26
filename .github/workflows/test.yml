@@ -7,6 +7,11 @@ on:
   pull_request:
     paths:
       - 'citizenCard.js'
+      - 'bossRaid.js'
+      - 'bossRaid.test.js'
+      - 'raidEvidence.js'
+      - 'raidTelegram.js'
+      - 'raidTelegram.test.js'
       - 'test/**'
       - 'package.json'
       - 'package-lock.json'

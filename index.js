@@ -30,6 +30,11 @@ require('./publisher').startPublisher(bot);
 require('./lumenHunt').register(bot);
 require('./telegramLink').register(bot);
 require('./citizenCard').register(bot);
+try {
+  require('./raidTelegram').register(bot, nftService);
+} catch (error) {
+  console.error('Boss Raid rehearsal initialization failed:', error.name);
+}
 
 console.log('Telegram NFT Bot is running...');
 

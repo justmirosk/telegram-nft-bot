@@ -39,6 +39,19 @@ class NFTService {
     this.contract = new this.web3.eth.Contract(ERC721_ABI, contractAddress);
   }
 
+  async getFinalizedMiniBeanyBlock() {
+    const [chain, block] = await Promise.all([
+      this.web3.eth.getChainId(),
+      this.web3.eth.getBlock('finalized'),
+    ]);
+    if (chain !== 56n || block?.number == null) throw new Error('BNB finalized block unavailable');
+    return String(block.number);
+  }
+
+  async getHolderAtBlock(tokenId, block) {
+    return this.contract.methods.ownerOf(tokenId).call({}, BigInt(block));
+  }
+
   async getCollectionName() {
     try {
       const name = await this.contract.methods.name().call();
