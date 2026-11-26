@@ -90,7 +90,13 @@ function createRaidEvidence({ nftService, secret, accountLookup, profile, fetche
     async verify(player, token, openingBlock, wallet, captureTribe, selection) {
       const confirmedBlock = await nftService.getFinalizedMiniBeanyBlock()
       if (BigInt(confirmedBlock) < BigInt(openingBlock)) throw new Error('Finalized RPC state is stale')
-      const openingOwner = await owner(token, openingBlock)
+      let openingOwner
+      try {
+        openingOwner = await owner(token, openingBlock)
+      } catch (error) {
+        if (!profile?.live || openingBlock === confirmedBlock) throw error
+        openingOwner = await nftService.getOwnerFromTransfers(token, openingBlock, confirmedBlock)
+      }
       const confirmedOwner = confirmedBlock === openingBlock ? openingOwner : await owner(token, confirmedBlock)
       const tribe = captureTribe && openingOwner === wallet && confirmedOwner === wallet
         ? selection?.tribe ?? await representedTribe(wallet)
