@@ -209,7 +209,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
         }
       }
       try {
-        await reply(attackResponse({ ...result, maxHp: raid.max_hp }), result.status)
+        await reply(attackResponse({ ...result, maxHp: raid.max_hp }))
       } finally {
         if (result.status === 'accepted' || result.status === 'expired') await updatePost(raid.id)
       }
@@ -228,28 +228,16 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
 
   async function attackFromButton(query) {
     const msg = query.message
-    const answer = async text => {
-      try {
-        await bot.answerCallbackQuery(query.id, { text: text.slice(0, 200), show_alert: true })
-      } catch (error) {
-        // Chain and profile verification can outlive the callback acknowledgement window.
-        if (!msg || !inTopic(msg) || !/query is too old|query ID is invalid/i.test(error?.message || '')) throw error
-        await respond(msg, text)
-      }
-    }
-    if (!msg || !inTopic(msg)) return answer('Open the boss post in the rehearsal topic.')
+    await bot.answerCallbackQuery(query.id).catch(() => {})
+    if (!msg || !inTopic(msg)) return
+    const reply = text => respond(msg, text)
     const raid = engine.latest(chat, topic)
-    if (!raid || String(msg.message_id) !== raid.post) return answer('This boss post is no longer current.')
+    if (!raid || String(msg.message_id) !== raid.post) return reply('This boss post is no longer current.')
     try {
-      return await strike(raid, String(query.from.id), 'callback:' + query.id, async (text, status) => {
-        if (status !== 'accepted') return answer(text)
-        // The group sees a successful hit even if Telegram has expired the callback.
-        await bot.answerCallbackQuery(query.id).catch(() => {})
-        return respond(msg, text)
-      })
+      await strike(raid, String(query.from.id), 'callback:' + query.id, reply)
     } catch (error) {
       onError('Raid button attack failed:', error?.name || 'Error')
-      try { await answer(retryText) } catch { /* Telegram callback may have expired. */ }
+      await reply(retryText).catch(() => {})
     }
   }
 
