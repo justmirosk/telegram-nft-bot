@@ -33,7 +33,8 @@ const ERC721_ABI = [
 ];
 
 class NFTService {
-  constructor(rpcUrl, contractAddress) {
+  constructor(rpcUrl, contractAddress, chainId = 56n) {
+    this.chainId = chainId;
     this.web3 = new Web3(rpcUrl);
     this.contractAddress = contractAddress;
     this.contract = new this.web3.eth.Contract(ERC721_ABI, contractAddress);
@@ -44,7 +45,7 @@ class NFTService {
       this.web3.eth.getChainId(),
       this.web3.eth.getBlock('finalized'),
     ]);
-    if (chain !== 56n || block?.number == null) throw new Error('BNB finalized block unavailable');
+    if (chain !== this.chainId || block?.number == null) throw new Error('BNB finalized block unavailable');
     return String(block.number);
   }
 

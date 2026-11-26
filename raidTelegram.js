@@ -1,7 +1,7 @@
-const { randomUUID } = require('node:crypto')
+const { createHash, randomUUID } = require('node:crypto')
 const { dirname, join } = require('node:path')
 const { existsSync, mkdirSync, writeFileSync, renameSync } = require('node:fs')
-const { createImageUploads } = require('./imageUploads')
+const { CHUNK_SIZE, createImageUploads } = require('./imageUploads')
 const NFTService = require('./nftService')
 const { openBossRaid } = require('./bossRaid')
 const { createRaidEvidence } = require('./raidEvidence')
@@ -37,6 +37,11 @@ function retainUploadedArtwork(template, dbFile, publisherDir) {
 
 function photoSource(photo, edit = false) {
   if (photo.startsWith('/')) return edit ? 'attach://' + photo : photo
+  const cindermaw = /^asset:cindermaw-(live|defeated)$/.exec(photo)
+  if (cindermaw) {
+    const path = join(__dirname, 'assets', 'cindermaw-' + cindermaw[1] + '.jpg')
+    return edit ? 'attach://' + path : path
+  }
   const asset = /^asset:(attacking|wounded|defeated)$/.exec(photo)
   if (!asset) return photo
   const path = join(__dirname, 'assets', 'raid-' + asset[1] + '.png')
@@ -83,6 +88,10 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     })
   }
 
+  const attackButton = active => ({
+    inline_keyboard: active ? [[{ text: '⚔️ Attack', callback_data: 'raid-hit' }]] : [],
+  })
+
   function caption(raid, display) {
     const lines = [display.name, `Boss HP ${raid.hp}/${raid.max_hp}`]
     if (raid.state === 'active') {
@@ -91,7 +100,8 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
         stage === 'wounded' ? 'Wounded · 0 armor' : 'Attacking · 10 armor',
         `Closes ${new Date(raid.closes).toISOString().replace('T', ' ').slice(0, 16)} UTC`,
         `Rehearsal prize · Beast #${raid.beast} and ${raid.lumens} Tribe Lumens (mock)`,
-        'Reply to this post with /attack.',
+        'Tap ⚔️ Attack or reply to this post with /attack.',
+        'First hit · 25 mock Lumens once per Beast.',
       )
     } else if (raid.state === 'defeated') {
       const result = JSON.parse(engine.winner(raid.id).result)
@@ -112,7 +122,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
       if (!raid || !display) return
       try {
         await bot.editMessageMedia({ type: 'photo', media: photoSource(display[phase(raid)], true), caption: caption(raid, display) }, {
-          chat_id: chat, message_id: Number(raid.post),
+          chat_id: chat, message_id: Number(raid.post), reply_markup: attackButton(raid.state === 'active'),
         })
       } catch (error) {
         if (!String(error?.message).includes('message is not modified')) onError('Raid artwork update failed:', error?.message)
@@ -153,7 +163,8 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     switch (result.status) {
       case 'accepted':
         return `MiniBeany ${tokenNumber(result.token)} dealt ${result.damage} damage. Boss HP ${result.hp}/${result.maxHp}.` +
-          (result.stage === 'defeated' ? ' Final hit! The mock prizes are recorded.' : result.nextAt ? ' Next attack in 5 minutes.' : ' You used all six attacks.')
+          (result.stage === 'defeated' ? ' Final hit! The mock prizes are recorded.' : result.nextAt ? ' Next attack in 5 minutes.' : ' You used all six attacks.') +
+          (result.participationAwarded ? ' You earned 25 mock participation Lumens.' : '')
       case 'cooldown': return waitMessage(result.nextAt)
       case 'cap': return 'You used all six attacks for this raid.'
       case 'ineligible': return 'Your linked wallet and selected MiniBeany must still qualify for this raid.'
@@ -165,41 +176,77 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     }
   }
 
-  handle(command('attack'), inTopic, async (msg, match, player) => {
-    if (processing.has(player)) return
+  async function strike(raid, player, message, reply) {
+    if (processing.has(player)) return reply('Your previous attack is still being checked.')
     processing.add(player)
     try {
-      const raid = engine.latest(chat, topic)
-      if (!raid || String(msg.reply_to_message?.message_id) !== raid.post) {
-        return await respond(msg, 'Reply directly to the current boss post with /attack.')
-      }
-      const request = { chat, topic, post: raid.post, message: String(msg.message_id), player }
+      const request = { chat, topic, post: raid.post, message, player }
       let result = engine.attack(request)
       if (result.status === 'retry') {
         const wallet = await evidence.linkedWallet(player)
-        if (!wallet) return await respond(msg, linkHelp)
+        if (!wallet) return await reply(linkHelp)
         const entrant = engine.entrant(raid.id, player)
-        if (entrant && entrant.wallet !== wallet) return await respond(msg, attackResponse({ status: 'ineligible' }))
+        if (entrant && entrant.wallet !== wallet) return await reply(attackResponse({ status: 'ineligible' }))
         let token = entrant?.token
-        if (!entrant) {
-          const entry = await eligible(raid, player, wallet)
-          if (!entry) return await respond(msg, 'This raid has closed.')
-          if (!entry.tokens.length) return await respond(msg, 'Your linked wallet has no eligible MiniBeany for this raid.')
-          token = entry.choice ?? (entry.tokens.length === 1 ? entry.tokens[0] : undefined)
-          if (token === undefined) return await respond(msg, 'Open a private chat with me and use /raidme to choose your MiniBeany. Then reply here with /attack.')
+        if (evidence.profileSelection) {
+          const selection = await evidence.profileSelection(wallet)
+          if (!entrant && selection.token === null) return await reply('Choose your Raid MiniBeany in BeaniScrolls → Profile.')
+          token = entrant?.token ?? selection.token
+          if (!selection.eligible.includes(token)) return await reply(attackResponse({ status: 'ineligible' }))
+          if (entrant && entrant.tribe !== selection.tribe) return await reply(attackResponse({ status: 'ineligible' }))
+          const verified = await evidence.verify(player, token, raid.opening_block, wallet, !entrant, selection)
+          result = engine.attack({ ...request, evidence: verified })
+        } else {
+          if (!entrant) {
+            const entry = await eligible(raid, player, wallet)
+            if (!entry) return await reply('This raid has closed.')
+            if (!entry.tokens.length) return await reply('Your linked wallet has no eligible MiniBeany for this raid.')
+            token = entry.choice ?? (entry.tokens.length === 1 ? entry.tokens[0] : undefined)
+            if (token === undefined) return await reply('Open a private chat with me and use /raidme to choose your MiniBeany. Then reply here with /attack.')
+          }
+          const verified = await evidence.verify(player, token, raid.opening_block, wallet, !entrant)
+          result = engine.attack({ ...request, evidence: verified })
         }
-        const verified = await evidence.verify(player, token, raid.opening_block, wallet, !entrant)
-        result = engine.attack({ ...request, evidence: verified })
       }
       try {
-        await respond(msg, attackResponse({ ...result, maxHp: raid.max_hp }))
+        await reply(attackResponse({ ...result, maxHp: raid.max_hp }))
       } finally {
         if (result.status === 'accepted' || result.status === 'expired') await updatePost(raid.id)
       }
     } finally {
       processing.delete(player)
     }
+  }
+
+  handle(command('attack'), inTopic, async (msg, match, player) => {
+    const raid = engine.latest(chat, topic)
+    if (!raid || String(msg.reply_to_message?.message_id) !== raid.post) {
+      return respond(msg, 'Reply directly to the current boss post with /attack.')
+    }
+    return strike(raid, player, String(msg.message_id), text => respond(msg, text))
   })
+
+  async function attackFromButton(query) {
+    const msg = query.message
+    const answer = async text => {
+      try {
+        await bot.answerCallbackQuery(query.id, { text: text.slice(0, 200), show_alert: true })
+      } catch (error) {
+        // Chain and profile verification can outlive the callback acknowledgement window.
+        if (!msg || !inTopic(msg) || !/query is too old|query ID is invalid/i.test(error?.message || '')) throw error
+        await respond(msg, text)
+      }
+    }
+    if (!msg || !inTopic(msg)) return answer('Open the boss post in the rehearsal topic.')
+    const raid = engine.latest(chat, topic)
+    if (!raid || String(msg.message_id) !== raid.post) return answer('This boss post is no longer current.')
+    try {
+      return await strike(raid, String(query.from.id), 'callback:' + query.id, answer)
+    } catch (error) {
+      onError('Raid button attack failed:', error?.name || 'Error')
+      try { await answer(retryText) } catch { /* Telegram callback may have expired. */ }
+    }
+  }
 
   handle(command('raidme'), inPrivate, async (msg, match, player) => {
     const raid = engine.latest(chat, topic)
@@ -212,6 +259,11 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
       const wait = Math.max(0, Math.ceil((entrant.last_hit + 300_000 - now()) / 1000))
       const timing = entrant.hits === 6 ? '' : wait ? ' ' + waitMessage(entrant.last_hit + 300_000) : ' Attack ready.'
       return respond(msg, `MiniBeany ${tokenNumber(entrant.token)} · ${entrant.hits}/6 hits used · ${engine.damageDealt(raid.id, player)} damage dealt.${timing}`)
+    }
+    if (evidence.profileSelection) {
+      const { token } = await evidence.profileSelection(wallet)
+      return respond(msg, token === null ? 'Choose your Raid MiniBeany in BeaniScrolls → Profile.'
+        : `MiniBeany ${tokenNumber(token)} is selected. Tap ⚔️ Attack on the boss post.`)
     }
     const entry = await eligible(raid, player, wallet)
     if (!entry) return respond(msg, 'This raid has closed.')
@@ -226,7 +278,8 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
   })
 
   bot.on('callback_query', async query => {
-    if (!query.data?.startsWith('raid:')) return
+    if (query.data === 'raid-hit') return attackFromButton(query)
+    if (evidence.profileSelection || !query.data?.startsWith('raid:')) return
     const match = /^raid:([a-f0-9-]{36}):(\d{1,3})$/.exec(query.data)
     let text = 'Open /raidme for a fresh list.'
     try {
@@ -263,10 +316,11 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
       : 'That Preview link code is invalid, expired, or already used.')
   })
 
-  async function postRaid(openingBlock) {
+  async function postRaid(openingBlock, draftTemplate = template) {
+    const template = draftTemplate
     const closes = now() + template.durationMinutes * 60_000
     const draft = { state: 'active', hp: template.hp, max_hp: template.hp, beast: template.beast, lumens: template.lumens, closes }
-    const post = await bot.sendPhoto(chat, photoSource(template.attacking), { ...target, caption: caption(draft, template) })
+    const post = await bot.sendPhoto(chat, photoSource(template.attacking), { ...target, caption: caption(draft, template), reply_markup: attackButton(true) })
     try {
       engine.launch({ id: randomUUID(), chat, topic, post: String(post.message_id), openingBlock, closes,
         hp: template.hp, beast: template.beast, lumens: template.lumens, display: template })
@@ -308,7 +362,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
       }
     })
 
-  return async function launchOnce(launchId) {
+  async function launchOnce(launchId, draftTemplate = template) {
     if (!launchId || engine.hasLaunch(launchId)) return { status: 'already-attempted' }
     if (adminBusy) return { status: 'busy' }
     adminBusy = true
@@ -324,12 +378,13 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
       const wallet = await evidence.linkedWallet(admin)
       const openingBlock = await evidence.openingBlock()
       if (!engine.claimLaunch(launchId)) return { status: 'already-attempted' }
-      const post = await postRaid(openingBlock)
+      const post = await postRaid(openingBlock, draftTemplate)
       return { status: 'posted', post, adminLinked: Boolean(wallet) }
     } finally {
       adminBusy = false
     }
   }
+  return launchOnce
 }
 
 function register(bot, nftService, env = process.env) {
@@ -340,6 +395,7 @@ function register(bot, nftService, env = process.env) {
   const secret = env.BOSS_RAID_PREVIEW_LINK_SECRET
   const filename = env.BOSS_RAID_DB_FILE
   const template = JSON.parse(env.BOSS_RAID_TEST_TEMPLATE || '{}')
+  if (template && template.wounded === undefined) template.wounded = template.attacking
   if (!/^-100[0-9]+$/.test(chat) || (topic && (!/^[1-9][0-9]*$/.test(topic) || !Number.isSafeInteger(Number(topic))))
     || !/^[1-9][0-9]*$/.test(admin) || !secret || secret.length < 32 || !filename || template === null
     || typeof template.name !== 'string' || !template.name.trim() || template.name.length > 90
@@ -351,15 +407,24 @@ function register(bot, nftService, env = process.env) {
   }
   const launchId = env.BOSS_RAID_AUTO_LAUNCH_ID
   if (launchId && !/^[a-zA-Z0-9_-]{1,80}$/.test(launchId)) throw new Error('Invalid Boss Raid launch ID')
+  const useProfile = env.BOSS_RAID_USE_PROFILE === 'true'
+  if (useProfile && (!env.BOSS_RAID_BNB_RPC_URL || !/^0x[0-9a-f]{40}$/i.test(env.BOSS_RAID_MINIBEANY_CONTRACT)
+      || !/^(56|97)$/.test(env.BOSS_RAID_BNB_CHAIN_ID) || (env.PUBLISH_API_KEY || '').length < 32)) {
+    throw new Error('Invalid Boss Raid Profile configuration')
+  }
   const raidNftService = env.BOSS_RAID_BNB_RPC_URL
-    ? new NFTService(env.BOSS_RAID_BNB_RPC_URL, nftService.contractAddress)
+    ? new NFTService(env.BOSS_RAID_BNB_RPC_URL, useProfile ? env.BOSS_RAID_MINIBEANY_CONTRACT : nftService.contractAddress, useProfile ? BigInt(env.BOSS_RAID_BNB_CHAIN_ID) : 56n)
     : nftService
   const accountLookup = env.BEANISCROLLS_TELEGRAM_LINK_URL && env.TELEGRAM_LINK_API_SECRET
     ? { url: env.BEANISCROLLS_TELEGRAM_LINK_URL, secret: env.TELEGRAM_LINK_API_SECRET }
     : undefined
-  const evidence = createRaidEvidence({ nftService: raidNftService, secret, accountLookup })
+  const engine = openBossRaid(filename)
+  const evidence = createRaidEvidence({
+    nftService: raidNftService, secret, accountLookup,
+    profile: useProfile ? { key: env.PUBLISH_API_KEY, readToken: engine.profileToken } : undefined,
+  })
   const launchOnce = registerRaidCommands(bot, {
-    engine: openBossRaid(filename),
+    engine,
     evidence,
     settings: { chat, topic, admin, template: retainUploadedArtwork(template, filename, env.PUBLISH_STATE_DIR) },
   })
@@ -376,6 +441,58 @@ function register(bot, nftService, env = process.env) {
         const known = /^(BeaniScrolls lookup HTTP [0-9]{3}|Telegram test group mismatch|MiniBeany bot is not in the test group)$/.test(message)
         console.error('Boss Raid rehearsal preflight or send failed:', known ? message : error?.name || 'Error')
       })
+  }
+  if (!useProfile) return
+  return async function handleWebRequest(input, reply) {
+    const { action, wallet, token } = input ?? {}
+    if (action === 'read-selection' || action === 'save-selection') {
+      if (typeof wallet !== 'string' || !/^0x[0-9a-f]{40}$/.test(wallet)) return reply(400, { error: 'Invalid wallet.' })
+      if (action === 'save-selection') {
+        if (typeof token !== 'string' || !/^(0|[1-9][0-9]?|100)$/.test(token)) return reply(400, { error: 'Invalid MiniBeany.' })
+        engine.saveProfileToken(wallet, token)
+      }
+      return reply(200, { token: engine.profileToken(wallet) })
+    }
+    if (action === 'stage-artwork') {
+      const encoded = input.image
+      if (typeof encoded !== 'string' || encoded.length > 5_600_000) return reply(400, { error: 'Invalid artwork size.' })
+      const image = Buffer.from(encoded, 'base64')
+      if (image.toString('base64') !== encoded || image.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') {
+        return reply(400, { error: 'Use a PNG image.' })
+      }
+      const uploads = createImageUploads(env.PUBLISH_STATE_DIR)
+      const upload_id = randomUUID()
+      const sha256 = createHash('sha256').update(image).digest('hex')
+      const chunk_count = Math.ceil(encoded.length / CHUNK_SIZE)
+      for (let chunk_index = 0; chunk_index < chunk_count; chunk_index++) {
+        uploads.stage({ upload_id, sha256, chunk_count, chunk_index,
+          chunk_base64: encoded.slice(chunk_index * CHUNK_SIZE, (chunk_index + 1) * CHUNK_SIZE) })
+      }
+      return reply(200, { upload_id })
+    }
+    if (action !== 'launch') return reply(400, { error: 'Invalid raid action.' })
+    const { id, name, beast, hp, durationMinutes, live, defeated } = input
+    const stage = (value, fallback) => value === undefined ? fallback
+      : typeof value === 'string' && /^[a-zA-Z0-9_-]{8,100}$/.test(value) ? 'upload:' + value : null
+    const attacking = stage(live, 'asset:cindermaw-live')
+    const ending = stage(defeated, 'asset:cindermaw-defeated')
+    if (typeof id !== 'string' || !/^[a-f0-9-]{36}$/.test(id)
+      || typeof beast !== 'string' || !/^(0|[1-9][0-9]{0,19})$/.test(beast)
+      || typeof name !== 'string' || !name.trim() || name.length > 90 || !attacking || !ending
+      || (beast !== '8' && (live === undefined || defeated === undefined))
+      || !Number.isSafeInteger(hp) || hp <= 0 || hp > 1_000_000
+      || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
+      return reply(400, { error: 'Invalid raid setup.' })
+    }
+    let artwork
+    try {
+      artwork = retainUploadedArtwork({ name: name.trim(), beast, hp, durationMinutes, lumens: 200,
+        attacking, wounded: attacking, defeated: ending }, filename, env.PUBLISH_STATE_DIR)
+    } catch {
+      return reply(400, { error: 'Both artwork uploads must be available PNG files.' })
+    }
+    const result = await launchOnce('web-' + id, artwork)
+    return reply(result.status === 'posted' ? 200 : 409, result)
   }
 }
 

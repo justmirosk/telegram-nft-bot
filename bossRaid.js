@@ -34,6 +34,14 @@ const schema = `
     player TEXT NOT NULL, decision_time INTEGER NOT NULL, result TEXT NOT NULL,
     PRIMARY KEY (chat, message)
   ) STRICT;
+  CREATE TABLE IF NOT EXISTS raid_profile_selections (
+    wallet TEXT PRIMARY KEY, token TEXT NOT NULL
+  ) STRICT;
+  CREATE TABLE IF NOT EXISTS raid_participation_prizes (
+    beast TEXT NOT NULL, player TEXT NOT NULL, wallet TEXT NOT NULL, tribe TEXT,
+    raid TEXT NOT NULL REFERENCES raids(id), amount INTEGER NOT NULL,
+    PRIMARY KEY (beast, player), UNIQUE (beast, wallet)
+  ) STRICT;
   CREATE TABLE IF NOT EXISTS raid_prizes (
     raid TEXT NOT NULL REFERENCES raids(id), kind TEXT NOT NULL, recipient TEXT,
     amount INTEGER, state TEXT NOT NULL, winning_message TEXT NOT NULL,
@@ -137,13 +145,18 @@ function openBossRaid(filename, { now = Date.now, roll = () => randomInt(-10, 11
       `).run(raid.id, player, wallet, token, tribeSnapshot, hits, at)
       db.prepare('UPDATE raids SET hp = ?, state = ?, winner_message = ? WHERE id = ?')
         .run(hp, hp === 0 ? 'defeated' : 'active', hp === 0 ? message : null, raid.id)
+      const participationAwarded = db.prepare(`
+        INSERT INTO raid_participation_prizes (beast, player, wallet, tribe, raid, amount)
+        VALUES (?, ?, ?, ?, ?, 25)
+        ON CONFLICT DO NOTHING
+      `).run(raid.beast, player, wallet, tribeSnapshot, raid.id).changes === 1
       if (hp === 0) {
         const prize = db.prepare('INSERT INTO raid_prizes VALUES (?, ?, ?, ?, ?, ?)')
         prize.run(raid.id, 'beast', wallet, null, 'pending', message)
         prize.run(raid.id, 'tribe-lumens', tribeSnapshot, raid.lumens, tribeSnapshot ? 'pending' : 'unawarded', message)
       }
       return record({
-        status: 'accepted', token, rolled, armor, damage, previousHp: raid.hp, hp, stage, hits,
+        status: 'accepted', participationAwarded, token, rolled, armor, damage, previousHp: raid.hp, hp, stage, hits,
         nextAt: hp > 0 && hits < MAX_HITS ? at + COOLDOWN_MS : null,
         openingBlock: raid.opening_block, confirmedBlock,
       })
@@ -195,6 +208,12 @@ function openBossRaid(filename, { now = Date.now, roll = () => randomInt(-10, 11
     claimLaunch: id => db.prepare('INSERT OR IGNORE INTO raid_launches VALUES (?, ?)').run(id, now()).changes === 1,
     hasLaunch: id => Boolean(db.prepare('SELECT 1 FROM raid_launches WHERE id = ?').get(id)),
     display: id => db.prepare('SELECT name, attacking, wounded, defeated FROM raid_display WHERE raid = ?').get(id),
+    profileToken: wallet => db.prepare('SELECT token FROM raid_profile_selections WHERE wallet = ?').get(wallet)?.token ?? null,
+    saveProfileToken: (wallet, token) => db.prepare(`
+      INSERT INTO raid_profile_selections VALUES (?, ?)
+      ON CONFLICT (wallet) DO UPDATE SET token = excluded.token
+    `).run(wallet, token),
+    participationPrizes: id => db.prepare('SELECT * FROM raid_participation_prizes WHERE raid = ? ORDER BY player').all(id),
     prizes: id => db.prepare('SELECT * FROM raid_prizes WHERE raid = ? ORDER BY kind').all(id),
     close: () => db.close(),
   }

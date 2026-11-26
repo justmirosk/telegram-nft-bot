@@ -68,7 +68,11 @@ function setup(t, { testChat = chat, testTopic = topic } = {}) {
     return events.get('callback_query')({ id: 'callback', data, from: { id: player },
       message: { chat: { id: chatId, type: 'private' } } })
   }
-  return { actions, errors, engine, evidence, privateMessage, groupMessage, pick, launchOnce }
+  function tap(id, player = 51, post = 20, thread = Number(testTopic)) {
+    return events.get('callback_query')({ id, data: 'raid-hit', from: { id: player },
+      message: { chat: { id: Number(testChat), type: 'supergroup' }, message_id: post, message_thread_id: thread } })
+  }
+  return { actions, errors, engine, evidence, privateMessage, groupMessage, pick, tap, launchOnce }
 }
 
 test('rehearsal launches in the test topic, selects a MiniBeany privately and changes artwork in place', async t => {
@@ -108,7 +112,7 @@ test('rehearsal launches in the test topic, selects a MiniBeany privately and ch
   assert.match(f.actions.at(-2).text, /#066 dealt 90 damage\. Boss HP 0\/600/)
   assert.equal(f.actions.at(-1).media.media, 'defeated-photo')
   assert.match(f.actions.at(-1).media.caption, /500 mock Lumens for Polarim/)
-  assert.deepEqual(f.actions.at(-1).options, { chat_id: chat, message_id: 20 })
+  assert.deepEqual(f.actions.at(-1).options, { chat_id: chat, message_id: 20, reply_markup: { inline_keyboard: [] } })
   await f.groupMessage('/raid', { id: 33, at: 361_000 })
   assert.equal(f.actions.at(-1).options.reply_markup.inline_keyboard[0][0].url, 'https://t.me/c/123/41/20')
   assert.deepEqual(f.errors, [])
@@ -366,4 +370,61 @@ test('uploaded raid artwork is retained independently of staged files', t => {
   assert.deepEqual(fs.readFileSync(retained.attacking), image)
   fs.rmSync(publisher, { recursive: true })
   assert.deepEqual(retainUploadedArtwork(template, file, publisher), retained)
+})
+
+test('attack button is scoped to the boss post and records one participation reward', async t => {
+  const f = setup(t)
+  await f.privateMessage('/raidadmin launch')
+  const raid = f.engine.latest(chat, topic)
+  assert.equal(f.actions[0].options.reply_markup.inline_keyboard[0][0].text, '⚔️ Attack')
+  await f.tap('other-post', 51, 21)
+  await f.tap('other-topic', 51, 20, 42)
+  assert.equal(f.engine.getRaid(raid.id).hp, 600)
+  await f.tap('first-hit')
+  await f.tap('first-hit')
+  assert.equal(f.engine.getRaid(raid.id).hp, 500)
+  assert.equal(f.engine.participationPrizes(raid.id)[0].amount, 25)
+  await f.groupMessage('/attack', { at: 300_000 })
+  assert.equal(f.engine.getRaid(raid.id).hp, 400)
+  assert.equal(f.engine.participationPrizes(raid.id).length, 1)
+})
+
+test('Profile selection admits only a MiniBeany in the represented Tribe', async t => {
+  const f = setup(t)
+  f.evidence.profileSelection = async () => ({ token: null, eligible: ['77'], tribe: 'polaris' })
+  await f.privateMessage('/raidadmin launch')
+  const raid = f.engine.latest(chat, topic)
+  await f.tap('no-selection')
+  assert.match(f.actions.at(-1).options.text, /Choose your Raid MiniBeany/)
+  assert.equal(f.engine.getRaid(raid.id).hp, 600)
+
+  f.evidence.profileSelection = async () => ({ token: '65', eligible: ['77'], tribe: 'polaris' })
+  await f.tap('wrong-tribe')
+  assert.match(f.actions.at(-1).options.text, /still qualify/)
+  assert.equal(f.engine.getRaid(raid.id).hp, 600)
+
+  f.evidence.profileSelection = async () => ({ token: '77', eligible: ['77'], tribe: 'polaris' })
+  await f.tap('eligible')
+  assert.equal(f.engine.getRaid(raid.id).hp, 500)
+  assert.equal(f.engine.entrant(raid.id, '51').token, '77')
+})
+
+test('participation is credited only once across separate raids of the same Beast', () => {
+  const engine = openBossRaid(':memory:', { now: () => 0, roll: () => 0 })
+  const wallet = walletOf('51')
+  const evidence = { token: '77', openingBlock: '42', confirmedBlock: '43',
+    wallet, openingOwner: wallet, confirmedOwner: wallet, tribe: 'polaris' }
+  try {
+    const strike = (id, beast, post, player = '51') => {
+      engine.launch({ id, chat, topic, post, closes: 60_000, openingBlock: '42', hp: 1, beast, lumens: 200 })
+      return engine.attack({ chat, topic, post, message: 'hit-' + post, player, evidence })
+    }
+    assert.equal(strike('first', '8', '1').participationAwarded, true)
+    assert.equal(strike('repeat', '8', '2').participationAwarded, false)
+    assert.equal(strike('relink', '8', '3', '100').participationAwarded, false)
+    assert.equal(strike('different', '9', '4').participationAwarded, true)
+    assert.equal(engine.prizes('first').find(prize => prize.kind === 'tribe-lumens').amount, 200)
+  } finally {
+    engine.close()
+  }
 })
