@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { formatAnnouncement } = require('./announcementFormatting');
 
-function startPublisher(bot, env = process.env) {
+function startPublisher(bot, env = process.env, handleRaid) {
   if (env.PUBLISH_ENABLED !== 'true') return null;
   const key = env.PUBLISH_API_KEY || '';
   const destinations = JSON.parse(env.PUBLISH_DESTINATIONS || '{}');
@@ -107,19 +107,21 @@ function startPublisher(bot, env = process.env) {
     if (req.url === '/mcp' && req.headers.origin &&
         !String(env.PUBLISH_ALLOWED_ORIGINS || '').split(',').includes(req.headers.origin)) return reply(403, { error: 'Origin not allowed' });
     if (req.url === '/mcp' && req.method !== 'POST') return handleMcp(req, res);
-    if (req.method !== 'POST' || !['/publish', '/mcp'].includes(req.url)) return reply(404, { error: 'Not found' });
+    const raidRequest = req.url === '/boss-raid' && Boolean(handleRaid);
+    if (req.method !== 'POST' || (!raidRequest && !['/publish', '/mcp'].includes(req.url))) return reply(404, { error: 'Not found' });
     if (!(req.headers['content-type'] || '').startsWith('application/json')) return reply(415, { error: 'Use application/json' });
     let bytes = 0;
     const chunks = [];
     try {
       for await (const chunk of req) {
         bytes += chunk.length;
-        if (bytes > 8 * 1024 * 1024) { reply(413, { error: 'Request too large' }); req.destroy(); return; }
+        if (bytes > (raidRequest ? 5_601_024 : 8 * 1024 * 1024)) { reply(413, { error: 'Request too large' }); req.destroy(); return; }
         chunks.push(chunk);
       }
       let input;
       try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
       catch { return reply(400, { error: 'Invalid JSON' }); }
+      if (raidRequest) return await handleRaid(input, reply);
       if (req.url === '/mcp') return await handleMcp(req, res, input);
       return await publish(input, reply);
     } catch {

@@ -4,7 +4,7 @@ const PRODUCTION_ORIGINS = new Set(['https://www.beaniscrolls.com', 'https://bea
 const TOKEN_COUNT = 101
 const BATCH_SIZE = 8
 
-function createRaidEvidence({ nftService, secret, accountLookup, fetcher = fetch }) {
+function createRaidEvidence({ nftService, secret, accountLookup, profile, fetcher = fetch }) {
   let accountOrigin = PREVIEW_ORIGIN
   let accountSecret = secret
   if (accountLookup) {
@@ -46,6 +46,16 @@ function createRaidEvidence({ nftService, secret, accountLookup, fetcher = fetch
   }
 
   return {
+    profileSelection: profile && (async wallet => {
+      const data = await lookup('/api/boss-raid/profile', 'address', wallet, { Authorization: 'Bearer ' + profile.key })
+      if ((data.tribe !== null && !TRIBES.has(data.tribe))
+        || !Array.isArray(data.eligible) || !data.eligible.every(token => typeof token === 'string' && /^(0|[1-9][0-9]?|100)$/.test(token))
+        || data.chainId !== Number(nftService.chainId) || data.contract?.toLowerCase() !== nftService.contractAddress.toLowerCase()) {
+        throw new Error('Invalid raid Profile evidence')
+      }
+      const token = profile.readToken(wallet)
+      return { eligible: data.eligible, token: data.eligible.includes(token) ? token : null, tribe: data.tribe }
+    }),
     usesSharedAccounts: Boolean(accountLookup),
     async openingBlock() {
       const block = await nftService.getFinalizedMiniBeanyBlock()
@@ -77,13 +87,13 @@ function createRaidEvidence({ nftService, secret, accountLookup, fetcher = fetch
       }
       return owned
     },
-    async verify(player, token, openingBlock, wallet, captureTribe) {
+    async verify(player, token, openingBlock, wallet, captureTribe, selection) {
       const confirmedBlock = await nftService.getFinalizedMiniBeanyBlock()
       if (BigInt(confirmedBlock) < BigInt(openingBlock)) throw new Error('Finalized RPC state is stale')
       const openingOwner = await owner(token, openingBlock)
       const confirmedOwner = confirmedBlock === openingBlock ? openingOwner : await owner(token, confirmedBlock)
       const tribe = captureTribe && openingOwner === wallet && confirmedOwner === wallet
-        ? await representedTribe(wallet)
+        ? selection?.tribe ?? await representedTribe(wallet)
         : null
       if (await linkedWallet(player) !== wallet) return null
       return { wallet, token, openingOwner, confirmedOwner, openingBlock, confirmedBlock, tribe }

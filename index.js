@@ -24,17 +24,17 @@ if (!contractAddress || contractAddress === '0x_your_nft_contract_address_here')
 const bot = new TelegramBot(token, { polling: true, request: { timeout: 30000 } });
 const nftService = new NFTService(rpcUrl, contractAddress);
 
-// Optional publisher shares the existing bot and polling process.
-require('./publisher').startPublisher(bot);
 // Opt-in community game; disabled by default.
 require('./lumenHunt').register(bot);
 require('./telegramLink').register(bot);
 require('./citizenCard').register(bot);
+let handleRaid;
 try {
-  require('./raidTelegram').register(bot, nftService);
+  handleRaid = require('./raidTelegram').register(bot, nftService);
 } catch (error) {
   console.error('Boss Raid rehearsal initialization failed:', error.name);
 }
+require('./publisher').startPublisher(bot, process.env, handleRaid);
 
 console.log('Telegram NFT Bot is running...');
 
