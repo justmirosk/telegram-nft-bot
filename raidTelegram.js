@@ -115,8 +115,8 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     } else {
       lines.push(raid.state === 'expired' ? 'Raid expired.' : 'Raid cancelled.')
     }
-    const [name, ...details] = lines.map(line => line.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'))
-    return [`<b>${name}</b>`, ...details].join('\n')
+    const [name, hp, ...details] = lines.map(line => line.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'))
+    return [`<b>${name}</b>`, `<i>${hp}</i>`, ...details].join('\n')
   }
 
   function updatePost(raidId) {
@@ -167,11 +167,11 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     switch (result.status) {
       case 'accepted':
         return [
-          `MiniBeany ${tokenNumber(result.token)} dealt ${result.damage} damage.`,
-          `Boss HP ${result.hp}/${result.maxHp}.`,
-          ...(result.stage === 'defeated' ? ['Final hit!', live ? 'The NFT will be sent by the admin.' : 'The mock prizes are recorded.']
+          `<b>MiniBeany ${tokenNumber(result.token)} dealt ${result.damage} damage.</b>`,
+          `<i>Boss HP ${result.hp}/${result.maxHp}</i>`,
+          ...(result.stage === 'defeated' ? ['Beast defeated!', 'Congratulations to the hero.', '<i>All lumens are recorded.</i>']
             : [result.nextAt ? 'Next attack in 5 minutes.' : 'You used all six attacks.']),
-          ...(result.participationAwarded ? [live ? 'You earned 25 participation Lumens.' : 'You earned 25 mock participation Lumens.'] : []),
+          ...(result.participationAwarded && result.stage !== 'defeated' ? [live ? 'You earned 25 participation Lumens.' : 'You earned 25 mock participation Lumens.'] : []),
         ].join('\n')
       case 'cooldown': return waitMessage(result.nextAt)
       case 'cap': return 'You used all six attacks for this raid.'
@@ -217,7 +217,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
         }
       }
       try {
-        await reply(attackResponse({ ...result, maxHp: raid.max_hp }))
+        await reply(attackResponse({ ...result, maxHp: raid.max_hp }), result.status === 'accepted' ? { parse_mode: 'HTML' } : undefined)
       } finally {
         if (result.status === 'accepted' || result.status === 'expired') await updatePost(raid.id)
       }
@@ -231,14 +231,14 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     if (!raid || String(msg.reply_to_message?.message_id) !== raid.post) {
       return respond(msg, 'Reply directly to the current boss post with /attack.')
     }
-    return strike(raid, player, String(msg.message_id), text => respond(msg, text))
+    return strike(raid, player, String(msg.message_id), (text, options) => respond(msg, text, options))
   })
 
   async function attackFromButton(query) {
     const msg = query.message
     if (!msg || !inTopic(msg)) return
     await bot.answerCallbackQuery(query.id).catch(() => {})
-    const reply = text => respond(msg, text)
+    const reply = (text, options) => respond(msg, text, options)
     const raid = engine.latest(chat, topic)
     if (!raid || String(msg.message_id) !== raid.post) return reply('This boss post is no longer current.')
     try {
