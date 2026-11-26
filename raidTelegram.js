@@ -49,7 +49,7 @@ function photoSource(photo, edit = false) {
 }
 
 function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now, onError = console.error }) {
-  const { chat, topic, admin, template } = settings
+  const { chat, topic, admin, template, live = false } = settings
   const target = topic ? { message_thread_id: Number(topic) } : {}
   const inTopic = msg => String(msg.chat.id) === chat && String(msg.message_thread_id ?? '') === topic
   const inPrivate = msg => msg.chat.type === 'private'
@@ -102,15 +102,15 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
       lines.push(
         stage === 'wounded' ? 'Wounded · 0 armor' : 'Attacking · 10 armor',
         `Closes ${new Date(raid.closes).toISOString().replace('T', ' ').slice(0, 16)} UTC`,
-        `Rehearsal prize · Beast #${raid.beast} and ${raid.lumens} Tribe Lumens (mock)`,
+        live ? `Prize · Beast #${raid.beast} and ${raid.lumens} Tribe Lumens` : `Rehearsal prize · Beast #${raid.beast} and ${raid.lumens} Tribe Lumens (mock)`,
         'Tap ⚔️ Attack or reply to this post with /attack.',
-        'First hit · 25 mock Lumens once per Beast.',
+        live ? 'First hit · 25 Lumens once per Beast.' : 'First hit · 25 mock Lumens once per Beast.',
       )
     } else if (raid.state === 'defeated') {
       const result = JSON.parse(engine.winner(raid.id).result)
       const tribe = engine.prizes(raid.id).find(prize => prize.kind === 'tribe-lumens')
       lines.push(`Defeated by MiniBeany ${tokenNumber(result.token)}.`)
-      lines.push(tribe.recipient ? `${raid.lumens} mock Lumens for ${tribeNames[tribe.recipient] || tribe.recipient}.`
+      lines.push(tribe.recipient ? `${raid.lumens}${live ? '' : ' mock'} Lumens for ${tribeNames[tribe.recipient] || tribe.recipient}.`
         : 'The winner has no active Tribe.')
     } else {
       lines.push(raid.state === 'expired' ? 'Raid expired.' : 'Raid cancelled.')
@@ -169,9 +169,9 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
         return [
           `MiniBeany ${tokenNumber(result.token)} dealt ${result.damage} damage.`,
           `Boss HP ${result.hp}/${result.maxHp}.`,
-          ...(result.stage === 'defeated' ? ['Final hit!', 'The mock prizes are recorded.']
+          ...(result.stage === 'defeated' ? ['Final hit!', live ? 'The NFT will be sent by the admin.' : 'The mock prizes are recorded.']
             : [result.nextAt ? 'Next attack in 5 minutes.' : 'You used all six attacks.']),
-          ...(result.participationAwarded ? ['You earned 25 mock participation Lumens.'] : []),
+          ...(result.participationAwarded ? [live ? 'You earned 25 participation Lumens.' : 'You earned 25 mock participation Lumens.'] : []),
         ].join('\n')
       case 'cooldown': return waitMessage(result.nextAt)
       case 'cap': return 'You used all six attacks for this raid.'
@@ -236,8 +236,8 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
 
   async function attackFromButton(query) {
     const msg = query.message
-    await bot.answerCallbackQuery(query.id).catch(() => {})
     if (!msg || !inTopic(msg)) return
+    await bot.answerCallbackQuery(query.id).catch(() => {})
     const reply = text => respond(msg, text)
     const raid = engine.latest(chat, topic)
     if (!raid || String(msg.message_id) !== raid.post) return reply('This boss post is no longer current.')
@@ -249,7 +249,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     }
   }
 
-  handle(command('raidme'), inPrivate, async (msg, match, player) => {
+  handle(command(live ? 'raidmelive' : 'raidme'), inPrivate, async (msg, match, player) => {
     const raid = engine.latest(chat, topic)
     if (!raid || raid.state !== 'active') return respond(msg, 'There is no open rehearsal raid.')
     const wallet = await evidence.linkedWallet(player)
@@ -304,6 +304,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
   })
 
   handle(/^\/raidlink(?:@\w+)?(?:\s+(\S+))?\s*$/i, inPrivate, async (msg, match, player) => {
+    if (live) return
     if (evidence.usesSharedAccounts) {
       const wallet = await evidence.linkedWallet(player)
       return respond(msg, wallet ? 'Your existing BeaniScrolls Telegram link is ready for Boss Raid.' : linkHelp)
@@ -338,7 +339,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
   }
 
   handle(/^\/raidadmin(?:@\w+)?(?:\s+(status|launch|cancel))?\s*$/i,
-    msg => inPrivate(msg) && String(msg.from.id) === admin,
+    msg => !live && inPrivate(msg) && String(msg.from.id) === admin,
     async (msg, match) => {
       if (adminBusy) return respond(msg, 'A raid admin action is already running.')
       adminBusy = true
@@ -368,6 +369,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     if (adminBusy) return { status: 'busy' }
     adminBusy = true
     try {
+      if (live && engine.beastAwarded(draftTemplate.beast)) return { status: 'beast-awarded' }
       if (engine.latest(chat, topic)?.state === 'active') return { status: 'already-open' }
       const group = await bot.getChat(chat)
       if (String(group.id) !== chat || group.type !== 'supergroup') throw new Error('Telegram test group mismatch')
@@ -388,7 +390,32 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
   return launchOnce
 }
 
-function register(bot, nftService, env = process.env) {
+function startRewardDelivery(engine, key) {
+  let running = false
+  async function deliver() {
+    if (running) return
+    running = true
+    try {
+      for (const { id, ...reward } of engine.rewardBatch()) {
+        try {
+          const response = await fetch('https://www.beaniscrolls.com/api/connected-accounts/telegram/boss-raid-rewards', {
+            method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10_000),
+            headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+            body: JSON.stringify(reward),
+          })
+          if (!response.ok) continue
+          const { status } = await response.json()
+          if (status === 'credited' || status === 'already_paid') engine.markRewardPaid(id)
+        } catch { /* Keep pending for the next delivery attempt. */ }
+      }
+    } finally {
+      running = false
+    }
+  }
+  setInterval(() => void deliver().catch(() => {}), 15_000).unref()
+}
+
+function register(bot, nftService, env = process.env, live = false) {
   if (env.BOSS_RAID_REHEARSAL_ENABLED !== 'true') return
   const chat = env.BOSS_RAID_TEST_CHAT_ID
   const topic = env.BOSS_RAID_TEST_TOPIC_ID?.trim() || ''
@@ -416,18 +443,19 @@ function register(bot, nftService, env = process.env) {
   const raidNftService = env.BOSS_RAID_BNB_RPC_URL
     ? new NFTService(env.BOSS_RAID_BNB_RPC_URL, useProfile ? env.BOSS_RAID_MINIBEANY_CONTRACT : nftService.contractAddress, useProfile ? BigInt(env.BOSS_RAID_BNB_CHAIN_ID) : 56n)
     : nftService
-  const accountLookup = !useProfile && env.BEANISCROLLS_TELEGRAM_LINK_URL && env.TELEGRAM_LINK_API_SECRET
+  const accountLookup = (live || !useProfile) && env.BEANISCROLLS_TELEGRAM_LINK_URL && env.TELEGRAM_LINK_API_SECRET
     ? { url: env.BEANISCROLLS_TELEGRAM_LINK_URL, secret: env.TELEGRAM_LINK_API_SECRET }
     : undefined
-  const engine = openBossRaid(filename)
+  if (live && (!accountLookup || !useProfile || !env.PUBLISH_STATE_DIR)) throw new Error('Invalid live raid account configuration')
+  const engine = openBossRaid(filename, { live })
   const evidence = createRaidEvidence({
     nftService: raidNftService, secret, accountLookup,
-    profile: useProfile ? { key: env.PUBLISH_API_KEY, readToken: engine.profileToken } : undefined,
+    profile: useProfile ? { key: env.PUBLISH_API_KEY, readToken: engine.profileToken, live } : undefined,
   })
   const launchOnce = registerRaidCommands(bot, {
     engine,
     evidence,
-    settings: { chat, topic, admin, template: retainUploadedArtwork(template, filename, env.PUBLISH_STATE_DIR) },
+    settings: { chat, topic, admin, live, template: retainUploadedArtwork(template, filename, env.PUBLISH_STATE_DIR) },
   })
   console.log('Boss Raid rehearsal configured:', JSON.stringify({ name: template.name, hp: template.hp }))
   if (launchId) {
@@ -444,8 +472,18 @@ function register(bot, nftService, env = process.env) {
       })
   }
   if (!useProfile) return
+  if (live) {
+    startRewardDelivery(engine, env.PUBLISH_API_KEY)
+    Promise.all([bot.getMe(), bot.getChat(chat), evidence.openingBlock()]).then(async ([identity, group]) => {
+      const member = await bot.getChatMember(chat, identity.id)
+      if (String(group.id) !== chat || group.type !== 'supergroup' || !['administrator', 'member', 'creator'].includes(member.status)) {
+        throw new Error('Live raid group unavailable')
+      }
+      console.log('Boss Raid live preflight passed')
+    }).catch(error => console.error('Boss Raid live preflight failed:', error?.name || 'Error'))
+  }
   evidence.linkedWallet(admin).then(wallet => {
-    console.log('Boss Raid Preview account lookup ready:', Boolean(wallet) ? 'admin linked' : 'admin not linked')
+    console.log(live ? 'Boss Raid live account lookup ready:' : 'Boss Raid Preview account lookup ready:', Boolean(wallet) ? 'admin linked' : 'admin not linked')
   }).catch(error => {
     const status = /^BeaniScrolls lookup HTTP (\d{3})$/.exec(error?.message || '')?.[1]
     console.error('Boss Raid Preview account lookup unavailable:', status || error?.name || 'Error')
@@ -476,6 +514,17 @@ function register(bot, nftService, env = process.env) {
           chunk_base64: encoded.slice(chunk_index * CHUNK_SIZE, (chunk_index + 1) * CHUNK_SIZE) })
       }
       return reply(200, { upload_id })
+    }
+    if (live && (action === 'status' || action === 'cancel')) {
+      const raid = engine.latest(chat, topic)
+      if (action === 'cancel' && raid?.state === 'active') {
+        const state = engine.cancel(raid.id)
+        await bot.editMessageCaption('Raid cancelled.', { chat_id: chat, message_id: Number(raid.post),
+          reply_markup: { inline_keyboard: [] } }).catch(() => {})
+        return reply(200, { status: state })
+      }
+      const winnerWallet = raid?.state === 'defeated' ? engine.prizes(raid.id).find(prize => prize.kind === 'beast')?.recipient : undefined
+      return reply(200, { status: raid?.state ?? 'none', post: raid?.post, winnerWallet })
     }
     if (action !== 'launch') return reply(400, { error: 'Invalid raid action.' })
     const { id, name, beast, hp, durationMinutes, live, defeated } = input

@@ -42,6 +42,10 @@ const schema = `
     raid TEXT NOT NULL REFERENCES raids(id), amount INTEGER NOT NULL,
     PRIMARY KEY (beast, player), UNIQUE (beast, wallet)
   ) STRICT;
+  CREATE TABLE IF NOT EXISTS raid_reward_delivery (
+    id TEXT PRIMARY KEY, beast TEXT NOT NULL, kind TEXT NOT NULL,
+    wallet TEXT NOT NULL, tribe TEXT, paid INTEGER NOT NULL DEFAULT 0
+  ) STRICT;
   CREATE TABLE IF NOT EXISTS raid_prizes (
     raid TEXT NOT NULL REFERENCES raids(id), kind TEXT NOT NULL, recipient TEXT,
     amount INTEGER, state TEXT NOT NULL, winning_message TEXT NOT NULL,
@@ -49,7 +53,7 @@ const schema = `
   ) STRICT;
 `
 
-function openBossRaid(filename, { now = Date.now, roll = () => randomInt(-10, 11) } = {}) {
+function openBossRaid(filename, { live = false, now = Date.now, roll = () => randomInt(-10, 11) } = {}) {
   const db = new DatabaseSync(filename)
   db.exec('PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;')
   db.exec(schema)
@@ -150,6 +154,11 @@ function openBossRaid(filename, { now = Date.now, roll = () => randomInt(-10, 11
         VALUES (?, ?, ?, ?, ?, 25)
         ON CONFLICT DO NOTHING
       `).run(raid.beast, player, wallet, tribeSnapshot, raid.id).changes === 1
+      if (live) {
+        const enqueue = db.prepare('INSERT OR IGNORE INTO raid_reward_delivery (id, beast, kind, wallet, tribe) VALUES (?, ?, ?, ?, ?)')
+        if (participationAwarded) enqueue.run('participation:' + raid.beast + ':' + wallet, raid.beast, 'participation', wallet, null)
+        if (hp === 0) enqueue.run('winner:' + raid.beast, raid.beast, 'winner', wallet, tribeSnapshot)
+      }
       if (hp === 0) {
         const prize = db.prepare('INSERT INTO raid_prizes VALUES (?, ?, ?, ?, ?, ?)')
         prize.run(raid.id, 'beast', wallet, null, 'pending', message)
@@ -208,6 +217,9 @@ function openBossRaid(filename, { now = Date.now, roll = () => randomInt(-10, 11
     claimLaunch: id => db.prepare('INSERT OR IGNORE INTO raid_launches VALUES (?, ?)').run(id, now()).changes === 1,
     hasLaunch: id => Boolean(db.prepare('SELECT 1 FROM raid_launches WHERE id = ?').get(id)),
     display: id => db.prepare('SELECT name, attacking, wounded, defeated FROM raid_display WHERE raid = ?').get(id),
+    rewardBatch: () => db.prepare('SELECT id, beast, kind, wallet, tribe FROM raid_reward_delivery WHERE paid = 0 ORDER BY rowid LIMIT 100').all(),
+    markRewardPaid: id => db.prepare('UPDATE raid_reward_delivery SET paid = 1 WHERE id = ?').run(id),
+    beastAwarded: beast => Boolean(db.prepare("SELECT 1 FROM raid_reward_delivery WHERE id = ?").get('winner:' + beast)),
     profileToken: wallet => db.prepare('SELECT token FROM raid_profile_selections WHERE wallet = ?').get(wallet)?.token ?? null,
     saveProfileToken: (wallet, token) => db.prepare(`
       INSERT INTO raid_profile_selections VALUES (?, ?)

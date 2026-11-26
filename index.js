@@ -34,7 +34,29 @@ try {
 } catch (error) {
   console.error('Boss Raid rehearsal initialization failed:', error.name);
 }
-require('./publisher').startPublisher(bot, process.env, handleRaid);
+let handleLiveRaid;
+if (process.env.BOSS_RAID_LIVE_ENABLED === 'true') {
+  try {
+    const env = process.env;
+    handleLiveRaid = require('./raidTelegram').register(bot, nftService, {
+      ...env,
+      BOSS_RAID_REHEARSAL_ENABLED: 'true',
+      BOSS_RAID_USE_PROFILE: 'true',
+      BOSS_RAID_AUTO_LAUNCH_ID: '',
+      BOSS_RAID_TEST_CHAT_ID: env.BOSS_RAID_LIVE_CHAT_ID,
+      BOSS_RAID_TEST_TOPIC_ID: env.BOSS_RAID_LIVE_TOPIC_ID || '',
+      BOSS_RAID_DB_FILE: env.PUBLISH_STATE_DIR ? join(env.PUBLISH_STATE_DIR, 'boss-raid-live.sqlite') : '',
+      BOSS_RAID_BNB_RPC_URL: env.BOSS_RAID_LIVE_RPC_URL,
+      BOSS_RAID_BNB_CHAIN_ID: '56',
+      BOSS_RAID_MINIBEANY_CONTRACT: contractAddress,
+      BOSS_RAID_TEST_TEMPLATE: JSON.stringify({ name: 'Cindermaw', beast: '8', hp: 600, lumens: 200,
+        durationMinutes: 60, attacking: 'asset:cindermaw-live', defeated: 'asset:cindermaw-defeated' }),
+    }, true);
+  } catch (error) {
+    console.error('Boss Raid live initialization failed:', error.name);
+  }
+}
+require('./publisher').startPublisher(bot, process.env, handleRaid, handleLiveRaid);
 
 console.log('Telegram NFT Bot is running...');
 
