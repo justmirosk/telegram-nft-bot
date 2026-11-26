@@ -489,3 +489,30 @@ test('live raid locks the verified fighter and Tribe after the first hit', () =>
     engine.close()
   }
 })
+
+test('new stepped raids apply armor to the four damage rolls and keep existing raids on legacy damage', () => {
+  let clock = 0
+  const rolls = [15, 25, 35, 55]
+  const engine = openBossRaid(':memory:', { now: () => clock, roll: () => 0, pickDamage: () => rolls.shift() })
+  try {
+    const launch = (id, post, steppedDamage) => engine.launch({ id, chat, topic, post,
+      closes: 3_600_000, openingBlock: '42', hp: 170, beast: '8', lumens: 200, steppedDamage })
+    const hit = (post, message, player) => {
+      const wallet = walletOf(player)
+      return engine.attack({ chat, topic, post, message, player, evidence: {
+        token: player, wallet, openingOwner: wallet, confirmedOwner: wallet, openingBlock: '42', confirmedBlock: '43', tribe: 'polaris',
+      } }).damage
+    }
+    launch('legacy', '1', false)
+    assert.equal(hit('1', '1', '51'), 100)
+    engine.cancel('legacy')
+    launch('stepped', '2', true)
+    assert.deepEqual(['51', '52', '53', '54'].map((p, j) => hit('2', String(j + 2), p)), [5, 15, 25, 45])
+    assert.equal(engine.getRaid('stepped').hp, 80)
+    clock = 300000
+    rolls.push(35)
+    assert.equal(hit('2', '6', '51'), 35)
+  } finally {
+    engine.close()
+  }
+})

@@ -49,7 +49,7 @@ function photoSource(photo, edit = false) {
 }
 
 function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now, onError = console.error }) {
-  const { chat, topic, admin, template, live = false } = settings
+  const { chat, topic, admin, template, live = false, steppedDamage = false } = settings
   const target = topic ? { message_thread_id: Number(topic) } : {}
   const inTopic = msg => String(msg.chat.id) === chat && String(msg.message_thread_id ?? '') === topic
   const inPrivate = msg => msg.chat.type === 'private'
@@ -325,7 +325,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     const post = await bot.sendPhoto(chat, photoSource(template.attacking), { ...target, caption: caption(draft, template), parse_mode: 'HTML', reply_markup: attackButton(true) })
     try {
       engine.launch({ id: randomUUID(), chat, topic, post: String(post.message_id), openingBlock, closes,
-        hp: template.hp, beast: template.beast, lumens: template.lumens, display: template })
+        hp: template.hp, beast: template.beast, lumens: template.lumens, display: template, steppedDamage })
     } catch (error) {
       try { await bot.deleteMessage(chat, post.message_id) } catch { /* The unregistered post cannot accept attacks. */ }
       throw error
@@ -455,7 +455,7 @@ function register(bot, nftService, env = process.env, live = false) {
   const launchOnce = registerRaidCommands(bot, {
     engine,
     evidence,
-    settings: { chat, topic, admin, live, template: retainUploadedArtwork(template, filename, env.PUBLISH_STATE_DIR) },
+    settings: { chat, topic, admin, live, steppedDamage: true, template: retainUploadedArtwork(template, filename, env.PUBLISH_STATE_DIR) },
   })
   console.log('Boss Raid rehearsal configured:', JSON.stringify({ name: template.name, hp: template.hp }))
   if (launchId) {

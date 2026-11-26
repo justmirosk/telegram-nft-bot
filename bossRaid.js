@@ -3,6 +3,7 @@ const { DatabaseSync } = require('node:sqlite')
 
 const COOLDOWN_MS = 300_000
 const MAX_HITS = 6
+const DAMAGE_ROLLS = [15, 25, 35, 55]
 
 const schema = `
   CREATE TABLE IF NOT EXISTS raids (
@@ -17,6 +18,9 @@ const schema = `
   ) STRICT;
   CREATE UNIQUE INDEX IF NOT EXISTS active_raid_topic ON raids (chat, topic)
     WHERE state = 'active';
+  CREATE TABLE IF NOT EXISTS raid_damage_rules (
+    raid TEXT PRIMARY KEY REFERENCES raids(id)
+  ) STRICT;
   CREATE TABLE IF NOT EXISTS raid_launches (
     id TEXT PRIMARY KEY, attempted_at INTEGER NOT NULL
   ) STRICT;
@@ -53,7 +57,7 @@ const schema = `
   ) STRICT;
 `
 
-function openBossRaid(filename, { live = false, now = Date.now, roll = () => randomInt(-10, 11) } = {}) {
+function openBossRaid(filename, { live = false, now = Date.now, roll = () => randomInt(-10, 11), pickDamage = () => DAMAGE_ROLLS[randomInt(DAMAGE_ROLLS.length)] } = {}) {
   const db = new DatabaseSync(filename)
   db.exec('PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;')
   db.exec(schema)
@@ -70,7 +74,7 @@ function openBossRaid(filename, { live = false, now = Date.now, roll = () => ran
     }
   }
 
-  function launch({ id, chat, topic, post, closes, openingBlock, hp, beast, lumens, display }) {
+  function launch({ id, chat, topic, post, closes, openingBlock, hp, beast, lumens, display, steppedDamage = false }) {
     return transaction(() => {
       const opens = now()
       if (!Number.isSafeInteger(closes) || closes <= opens) throw new RangeError('Invalid closing time')
@@ -82,6 +86,7 @@ function openBossRaid(filename, { live = false, now = Date.now, roll = () => ran
         INSERT INTO raids (id, chat, topic, post, opens, closes, opening_block, max_hp, hp, beast, lumens, state)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
       `).run(id, chat, topic, post, opens, closes, openingBlock, hp, hp, beast, lumens)
+      if (steppedDamage) db.prepare('INSERT INTO raid_damage_rules VALUES (?)').run(id)
       if (display) {
         db.prepare('INSERT INTO raid_display VALUES (?, ?, ?, ?, ?)')
           .run(id, display.name, display.attacking, display.wounded, display.defeated)
@@ -137,10 +142,12 @@ function openBossRaid(filename, { live = false, now = Date.now, roll = () => ran
       }
       if (!entrant && tribe !== null && typeof tribe !== 'string') return { status: 'retry' }
 
-      const rolled = roll()
-      if (!Number.isInteger(rolled) || rolled < -10 || rolled > 10) throw new RangeError('Invalid damage roll')
+      const stepped = Boolean(db.prepare('SELECT 1 FROM raid_damage_rules WHERE raid = ?').get(raid.id))
+      const rolled = stepped ? pickDamage() : roll()
+      const validRoll = stepped ? DAMAGE_ROLLS.includes(rolled) : Number.isInteger(rolled) && rolled >= -10 && rolled <= 10
+      if (!validRoll) throw new RangeError('Invalid damage roll')
       const armor = raid.hp > raid.max_hp / 2 ? 10 : 0
-      const damage = Math.min(raid.hp, 110 + rolled - armor)
+      const damage = Math.min(raid.hp, (stepped ? rolled : 110 + rolled) - armor)
       const hp = raid.hp - damage
       const hits = (entrant?.hits ?? 0) + 1
       const stage = hp === 0 ? 'defeated' : hp <= raid.max_hp / 2 ? 'wounded' : 'attacking'
