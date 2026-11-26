@@ -22,6 +22,9 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
   const target = topic ? { message_thread_id: Number(topic) } : {}
   const inTopic = msg => String(msg.chat.id) === chat && String(msg.message_thread_id ?? '') === topic
   const inPrivate = msg => msg.chat.type === 'private'
+  const linkHelp = evidence.usesSharedAccounts
+    ? 'Link Telegram in BeaniScrolls → Profile → Connected Accounts and send /link CODE to me privately. Then reply to the boss post again.'
+    : 'Generate a Telegram link code in BeaniScrolls Preview. Send /raidlink CODE to me privately, then reply to the boss post again.'
   const processing = new Set()
   const selections = new Map()
   let currentSelectionRaid
@@ -148,7 +151,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
       let result = engine.attack(request)
       if (result.status === 'retry') {
         const wallet = await evidence.linkedWallet(player)
-        if (!wallet) return await respond(msg, 'Generate a Telegram link code in BeaniScrolls Preview. Send /raidlink CODE to me privately, then reply here again.')
+        if (!wallet) return await respond(msg, linkHelp)
         const entrant = engine.entrant(raid.id, player)
         if (entrant && entrant.wallet !== wallet) return await respond(msg, attackResponse({ status: 'ineligible' }))
         let token = entrant?.token
@@ -176,7 +179,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     const raid = engine.latest(chat, topic)
     if (!raid || raid.state !== 'active') return respond(msg, 'There is no open rehearsal raid.')
     const wallet = await evidence.linkedWallet(player)
-    if (!wallet) return respond(msg, 'Generate a link code in BeaniScrolls Preview, then send /raidlink CODE here.')
+    if (!wallet) return respond(msg, linkHelp)
     const entrant = engine.entrant(raid.id, player)
     if (entrant) {
       if (entrant.wallet !== wallet) return respond(msg, attackResponse({ status: 'ineligible' }))
@@ -221,6 +224,10 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
   })
 
   handle(/^\/raidlink(?:@\w+)?(?:\s+(\S+))?\s*$/i, inPrivate, async (msg, match, player) => {
+    if (evidence.usesSharedAccounts) {
+      const wallet = await evidence.linkedWallet(player)
+      return respond(msg, wallet ? 'Your existing BeaniScrolls Telegram link is ready for Boss Raid.' : linkHelp)
+    }
     const code = match[1] || ''
     if (!/^[A-Za-z0-9_-]{24}$/.test(code)) {
       return respond(msg, 'Generate a new code in BeaniScrolls Preview → Profile → Connected Accounts, then send /raidlink CODE here.')
@@ -321,16 +328,25 @@ function register(bot, nftService, env = process.env) {
   const raidNftService = env.BOSS_RAID_BNB_RPC_URL
     ? new NFTService(env.BOSS_RAID_BNB_RPC_URL, nftService.contractAddress)
     : nftService
+  const accountLookup = env.BEANISCROLLS_TELEGRAM_LINK_URL && env.TELEGRAM_LINK_API_SECRET
+    ? { url: env.BEANISCROLLS_TELEGRAM_LINK_URL, secret: env.TELEGRAM_LINK_API_SECRET }
+    : undefined
+  const evidence = createRaidEvidence({ nftService: raidNftService, secret, accountLookup })
   const launchOnce = registerRaidCommands(bot, {
     engine: openBossRaid(filename),
-    evidence: createRaidEvidence({ nftService: raidNftService, secret }),
+    evidence,
     settings: { chat, topic, admin, template },
   })
   if (launchId) {
-    launchOnce(launchId).then(result => console.log('Boss Raid rehearsal launch:', JSON.stringify(result)))
-      .catch(error => {
+    launchOnce(launchId).then(async result => {
+      if (result.status === 'already-attempted') {
+        const wallet = await evidence.linkedWallet(admin)
+        console.log('Boss Raid account verification:', JSON.stringify({ adminLinked: Boolean(wallet), sharedAccounts: evidence.usesSharedAccounts }))
+      }
+      console.log('Boss Raid rehearsal launch:', JSON.stringify(result))
+    }).catch(error => {
         const message = error?.message || ''
-        const known = /^(BeaniScrolls Preview lookup HTTP [0-9]{3}|Telegram test group mismatch|MiniBeany bot is not in the test group)$/.test(message)
+        const known = /^(BeaniScrolls lookup HTTP [0-9]{3}|Telegram test group mismatch|MiniBeany bot is not in the test group)$/.test(message)
         console.error('Boss Raid rehearsal preflight or send failed:', known ? message : error?.name || 'Error')
       })
   }

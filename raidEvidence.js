@@ -1,22 +1,33 @@
 const PREVIEW_ORIGIN = 'https://gems-testnet.beaniscrolls.site'
 const TRIBES = new Set(['avira', 'polaris', 'binara', 'solara'])
+const PRODUCTION_ORIGINS = new Set(['https://www.beaniscrolls.com', 'https://beaniscrolls.com', 'https://beaniscrolls.site'])
 const TOKEN_COUNT = 101
 const BATCH_SIZE = 8
 
-function createRaidEvidence({ nftService, secret, fetcher = fetch }) {
-  async function lookup(path, key, value, headers = {}) {
-    const url = new URL(path, PREVIEW_ORIGIN)
+function createRaidEvidence({ nftService, secret, accountLookup, fetcher = fetch }) {
+  let accountOrigin = PREVIEW_ORIGIN
+  let accountSecret = secret
+  if (accountLookup) {
+    accountOrigin = new URL(accountLookup.url).origin
+    if (!PRODUCTION_ORIGINS.has(accountOrigin) || !accountLookup.secret) {
+      throw new Error('Invalid shared BeaniScrolls account lookup')
+    }
+    if (accountOrigin === 'https://beaniscrolls.com') accountOrigin = 'https://www.beaniscrolls.com'
+    accountSecret = accountLookup.secret
+  }
+  async function lookup(path, key, value, headers = {}, origin = PREVIEW_ORIGIN) {
+    const url = new URL(path, origin)
     url.searchParams.set(key, value)
     const response = await fetcher(url, {
       headers, redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(12_000),
     })
-    if (!response.ok) throw new Error('BeaniScrolls Preview lookup HTTP ' + response.status)
+    if (!response.ok) throw new Error('BeaniScrolls lookup HTTP ' + response.status)
     return response.json()
   }
 
   async function linkedWallet(player) {
     const profile = await lookup('/api/connected-accounts/telegram/citizen', 'telegramUserId', player,
-      { Authorization: 'Bearer ' + secret })
+      { Authorization: 'Bearer ' + accountSecret }, accountOrigin)
     if (profile.linked === false) return null
     if (profile.linked !== true || !/^0x[0-9a-f]{40}$/i.test(profile.wallet)) {
       throw new Error('Invalid verified wallet response')
@@ -35,6 +46,7 @@ function createRaidEvidence({ nftService, secret, fetcher = fetch }) {
   }
 
   return {
+    usesSharedAccounts: Boolean(accountLookup),
     async openingBlock() {
       const block = await nftService.getFinalizedMiniBeanyBlock()
       await owner('0', block)
