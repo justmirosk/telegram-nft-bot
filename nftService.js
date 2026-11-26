@@ -53,31 +53,6 @@ class NFTService {
     return this.contract.methods.ownerOf(tokenId).call({}, BigInt(block));
   }
 
-  async getOwnerFromTransfers(token, openingBlock, confirmedBlock) {
-    const end = BigInt(confirmedBlock);
-    const start = BigInt(openingBlock) + 1n;
-    if (start > end || end - start > 200_000n) throw new Error('Invalid raid transfer range');
-    const transfer = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-    const topics = [transfer, null, null, '0x' + BigInt(token).toString(16).padStart(64, '0')];
-    for (let batch = start; batch <= end; batch += 40_000n) {
-      const reads = [];
-      for (let fromBlock = batch; fromBlock <= end && fromBlock < batch + 40_000n; fromBlock += 10_000n) {
-        const last = fromBlock + 9999n;
-        reads.push(this.web3.eth.getPastLogs({ address: this.contractAddress, topics,
-          fromBlock, toBlock: last < end ? last : end }));
-      }
-      const logs = (await Promise.all(reads)).flat();
-      logs.sort((a, b) => a.blockNumber === b.blockNumber
-        ? Number(a.logIndex - b.logIndex) : Number(a.blockNumber - b.blockNumber));
-      const first = logs[0];
-      if (first) {
-        if (first.removed || !/^0x[0-9a-f]{64}$/i.test(first.topics?.[1])) throw new Error('Invalid raid transfer log');
-        return '0x' + first.topics[1].slice(-40).toLowerCase();
-      }
-    }
-    return (await this.getHolderAtBlock(token, confirmedBlock)).toLowerCase();
-  }
-
   async getCollectionName() {
     try {
       const name = await this.contract.methods.name().call();

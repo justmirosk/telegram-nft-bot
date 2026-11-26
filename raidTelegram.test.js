@@ -467,3 +467,25 @@ test('live final hit enqueues one participation credit and one winner credit', (
     engine.close()
   }
 })
+
+test('live raid locks the verified fighter and Tribe after the first hit', () => {
+  let clock = 0
+  const engine = openBossRaid(':memory:', { live: true, now: () => clock, roll: () => 0 })
+  try {
+    const wallet = walletOf('51')
+    engine.launch({ id: 'live', chat, topic, post: '20', closes: 600000, openingBlock: '42', hp: 150, beast: '8', lumens: 200 })
+    const attack = { chat, topic, post: '20', player: '51' }
+    assert.equal(engine.attack({ ...attack, message: '1' }).status, 'retry')
+    const proof = { token: '77', wallet, confirmedOwner: wallet, openingOwner: null,
+      openingBlock: '42', confirmedBlock: '43', tribe: 'polaris' }
+    assert.equal(engine.attack({ ...attack, message: '1', evidence: proof }).status, 'accepted')
+    assert.equal(engine.attack({ ...attack, message: '2' }).status, 'cooldown')
+    clock = 300000
+    const finish = engine.attack({ ...attack, message: '3' })
+    assert.equal(finish.stage, 'defeated')
+    assert.equal(finish.token, '77')
+    assert.equal(engine.rewardBatch().find(row => row.kind === 'winner').tribe, 'polaris')
+  } finally {
+    engine.close()
+  }
+})
