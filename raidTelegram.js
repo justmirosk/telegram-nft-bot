@@ -93,7 +93,10 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
   })
 
   function caption(raid, display) {
-    const lines = [display.name, `Boss HP ${raid.hp}/${raid.max_hp}`]
+    const filled = raid.hp === raid.max_hp ? 10 : raid.hp === 0 ? 0
+      : Math.max(1, Math.min(9, Math.round(10 * raid.hp / raid.max_hp)))
+    const bar = '🟥'.repeat(filled) + '⬛'.repeat(10 - filled)
+    const lines = [display.name, `Boss HP ${raid.hp}/${raid.max_hp}`, bar]
     if (raid.state === 'active') {
       const stage = phase(raid)
       lines.push(
@@ -112,7 +115,8 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     } else {
       lines.push(raid.state === 'expired' ? 'Raid expired.' : 'Raid cancelled.')
     }
-    return lines.join('\n')
+    const [name, ...details] = lines.map(line => line.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'))
+    return [`<b>${name}</b>`, ...details].join('\n')
   }
 
   function updatePost(raidId) {
@@ -121,7 +125,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
       const display = engine.display(raidId)
       if (!raid || !display) return
       try {
-        await bot.editMessageMedia({ type: 'photo', media: photoSource(display[phase(raid)], true), caption: caption(raid, display) }, {
+        await bot.editMessageMedia({ type: 'photo', media: photoSource(display[phase(raid)], true), caption: caption(raid, display), parse_mode: 'HTML' }, {
           chat_id: chat, message_id: Number(raid.post), reply_markup: attackButton(raid.state === 'active'),
         })
       } catch (error) {
@@ -151,7 +155,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     await updatePost(raid.id)
     const path = [chat.slice(4), topic, raid.post].filter(Boolean).join('/')
     const url = 'https://t.me/c/' + path
-    return respond(msg, caption(raid, display), { reply_markup: { inline_keyboard: [[{ text: 'Open boss post', url }]] } })
+    return respond(msg, caption(raid, display), { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: 'Open boss post', url }]] } })
   })
 
   function waitMessage(nextAt) {
@@ -162,9 +166,13 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
   function attackResponse(result) {
     switch (result.status) {
       case 'accepted':
-        return `MiniBeany ${tokenNumber(result.token)} dealt ${result.damage} damage. Boss HP ${result.hp}/${result.maxHp}.` +
-          (result.stage === 'defeated' ? ' Final hit! The mock prizes are recorded.' : result.nextAt ? ' Next attack in 5 minutes.' : ' You used all six attacks.') +
-          (result.participationAwarded ? ' You earned 25 mock participation Lumens.' : '')
+        return [
+          `MiniBeany ${tokenNumber(result.token)} dealt ${result.damage} damage.`,
+          `Boss HP ${result.hp}/${result.maxHp}.`,
+          ...(result.stage === 'defeated' ? ['Final hit!', 'The mock prizes are recorded.']
+            : [result.nextAt ? 'Next attack in 5 minutes.' : 'You used all six attacks.']),
+          ...(result.participationAwarded ? ['You earned 25 mock participation Lumens.'] : []),
+        ].join('\n')
       case 'cooldown': return waitMessage(result.nextAt)
       case 'cap': return 'You used all six attacks for this raid.'
       case 'ineligible': return 'Your linked wallet and selected MiniBeany must still qualify for this raid.'
@@ -313,7 +321,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     const template = draftTemplate
     const closes = now() + template.durationMinutes * 60_000
     const draft = { state: 'active', hp: template.hp, max_hp: template.hp, beast: template.beast, lumens: template.lumens, closes }
-    const post = await bot.sendPhoto(chat, photoSource(template.attacking), { ...target, caption: caption(draft, template), reply_markup: attackButton(true) })
+    const post = await bot.sendPhoto(chat, photoSource(template.attacking), { ...target, caption: caption(draft, template), parse_mode: 'HTML', reply_markup: attackButton(true) })
     try {
       engine.launch({ id: randomUUID(), chat, topic, post: String(post.message_id), openingBlock, closes,
         hp: template.hp, beast: template.beast, lumens: template.lumens, display: template })
