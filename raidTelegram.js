@@ -3,7 +3,7 @@ const { dirname, join } = require('node:path')
 const { existsSync, mkdirSync, writeFileSync, renameSync } = require('node:fs')
 const { CHUNK_SIZE, createImageUploads } = require('./imageUploads')
 const NFTService = require('./nftService')
-const { openBossRaid } = require('./bossRaid')
+const { openBossRaid, raidCooldownMs } = require('./bossRaid')
 const { createRaidEvidence } = require('./raidEvidence')
 
 const tokenNumber = token => '#' + String(Number(token) + 1).padStart(3, '0')
@@ -170,7 +170,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
           `<b>MiniBeany ${tokenNumber(result.token)} dealt ${result.damage} damage.</b>`,
           `<i>Boss HP ${result.hp}/${result.maxHp}</i>`,
           ...(result.stage === 'defeated' ? ['Beast defeated!', 'Congratulations to the hero.', '<i>All lumens are recorded.</i>']
-            : [result.nextAt ? 'Next attack in 5 minutes.' : 'You used all six attacks.']),
+            : [result.nextAt ? `Next attack in ${raidCooldownMs(live) / 60_000} minutes.` : 'You used all six attacks.']),
           ...(result.participationAwarded && result.stage !== 'defeated' ? [live ? 'You earned 25 participation Lumens.' : 'You earned 25 mock participation Lumens.'] : []),
         ].join('\n')
       case 'cooldown': return waitMessage(result.nextAt)
@@ -257,8 +257,8 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     if (!wallet) return respond(msg, linkHelp)
     if (entrant) {
       if (entrant.wallet !== wallet) return respond(msg, attackResponse({ status: 'ineligible' }))
-      const wait = Math.max(0, Math.ceil((entrant.last_hit + 300_000 - now()) / 1000))
-      const timing = entrant.hits === 6 ? '' : wait ? ' ' + waitMessage(entrant.last_hit + 300_000) : ' Attack ready.'
+      const wait = Math.max(0, Math.ceil((entrant.last_hit + raidCooldownMs(live) - now()) / 1000))
+      const timing = entrant.hits === 6 ? '' : wait ? ' ' + waitMessage(entrant.last_hit + raidCooldownMs(live)) : ' Attack ready.'
       return respond(msg, `MiniBeany ${tokenNumber(entrant.token)} · ${entrant.hits}/6 hits used · ${engine.damageDealt(raid.id, player)} damage dealt.${timing}`)
     }
     if (evidence.profileSelection) {
