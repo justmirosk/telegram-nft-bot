@@ -45,7 +45,32 @@ function createRaidEvidence({ nftService, secret, accountLookup, profile, fetche
     return (await nftService.getHolderAtBlock(token, block)).toLowerCase()
   }
 
+  async function victoryFighter(token, wallet) {
+    const origin = profile?.live ? accountOrigin : PREVIEW_ORIGIN
+    async function read(path, params) {
+      try {
+        const url = new URL(path, origin)
+        url.search = new URLSearchParams(params)
+        const response = await fetcher(url, { redirect: 'error', signal: AbortSignal.timeout(5000) })
+        return response.ok ? await response.json() : null
+      } catch {
+        return null
+      }
+    }
+    const [metadata, overrides] = await Promise.all([
+      read('/api/nfts', { chain: 'bnb', tokenId: token }),
+      wallet ? read('/api/minibeany-holder-overrides', { address: wallet }) : null,
+    ])
+    const entries = Array.isArray(overrides?.overrides) ? overrides.overrides : []
+    const nickname = entries.find(entry => String(entry?.token_id) === token)?.nickname
+    const cachedUrl = metadata?.nft?.image?.cachedUrl
+    const image = typeof cachedUrl === 'string' && /^https:\/\/nft2-cdn\.alchemy\.com\/bnb-mainnet\/[a-z0-9_-]+$/i.test(cachedUrl)
+      ? cachedUrl : null
+    return { image, nickname: typeof nickname === 'string' ? Array.from(nickname.trim()).slice(0, 80).join('') : '' }
+  }
+
   return {
+    victoryFighter,
     profileSelection: profile && (async wallet => {
       const data = await lookup('/api/boss-raid/profile', 'address', wallet, { Authorization: 'Bearer ' + profile.key }, profile.live ? accountOrigin : PREVIEW_ORIGIN)
       if ((data.tribe !== null && !TRIBES.has(data.tribe))

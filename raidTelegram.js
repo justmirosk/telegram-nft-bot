@@ -10,7 +10,7 @@ const tokenNumber = token => '#' + String(Number(token) + 1).padStart(3, '0')
 const phase = raid => raid.hp === 0 ? 'defeated' : raid.hp <= raid.max_hp / 2 ? 'wounded' : 'attacking'
 const command = name => new RegExp('^/' + name + '(?:@\\w+)?\\s*$', 'i')
 const retryText = 'Raid verification is temporarily unavailable. Please try again.'
-const tribeNames = { avira: 'Avarai', polaris: 'Polarim', binara: 'Binarai', solara: 'Solarim' }
+const tribeNames = { avira: 'Avirai', polaris: 'Polarim', binara: 'Binarai', solara: 'Solarim' }
 
 function retainUploadedArtwork(template, dbFile, publisherDir) {
   const dir = join(dirname(dbFile), 'boss-raid-artwork')
@@ -169,9 +169,8 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
         return [
           `<b>MiniBeany ${tokenNumber(result.token)} dealt ${result.damage} damage.</b>`,
           `<i>Boss HP ${result.hp}/${result.maxHp}</i>`,
-          ...(result.stage === 'defeated' ? ['Beast defeated!', 'Congratulations to the hero.', '<i>All lumens are recorded.</i>']
-            : [result.nextAt ? `Next attack in ${raidCooldownMs(live) / 60_000} minutes.` : 'You used all six attacks.']),
-          ...(result.participationAwarded && result.stage !== 'defeated' ? [live ? 'You earned 25 participation Lumens.' : 'You earned 25 mock participation Lumens.'] : []),
+          result.nextAt ? `Next attack in ${raidCooldownMs(live) / 60_000} minutes.` : 'You used all six attacks.',
+          ...(result.participationAwarded ? [live ? 'You earned 25 participation Lumens.' : 'You earned 25 mock participation Lumens.'] : []),
         ].join('\n')
       case 'cooldown': return waitMessage(result.nextAt)
       case 'cap': return 'You used all six attacks for this raid.'
@@ -182,6 +181,33 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
       case 'retry': return retryText
       default: return 'Reply directly to the current boss post with /attack.'
     }
+  }
+
+  async function announceVictory(raid, player, result, reply) {
+    const entrant = engine.entrant(raid.id, player)
+    const tribe = tribeNames[entrant?.tribe]
+    const beast = engine.display(raid.id)?.name || 'the Beast'
+    const fighter = evidence.victoryFighter
+      ? await evidence.victoryFighter(result.token, entrant?.wallet).catch(() => ({})) : {}
+    const escape = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    const name = escape(fighter.nickname || 'MiniBeany ' + tokenNumber(result.token))
+    const caption = [
+      `<b>${tribe ? 'Victory for ' + tribe + '!' : 'Beast defeated!'}</b>`,
+      `<b>${name} dealt ${result.damage} damage.</b>`,
+      `<i>Boss HP 0/${raid.max_hp}</i>`,
+      `${name} landed the final blow on ${escape(beast)}.`,
+      ...(tribe ? [`<b>${raid.lumens} ${live ? '' : 'mock '}Lumens for ${tribe}.</b>`] : []),
+    ].join('\n')
+    if (fighter.image) {
+      try {
+        await bot.sendPhoto(chat, fighter.image, { ...target, caption, parse_mode: 'HTML',
+          reply_parameters: { message_id: Number(raid.post) } })
+        return
+      } catch (error) {
+        if (error?.response?.statusCode !== 400) throw error
+      }
+    }
+    return reply(caption, { parse_mode: 'HTML' })
   }
 
   async function strike(raid, player, message, reply) {
@@ -217,7 +243,8 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
         }
       }
       try {
-        await reply(attackResponse({ ...result, maxHp: raid.max_hp }), result.status === 'accepted' ? { parse_mode: 'HTML' } : undefined)
+        if (result.status === 'accepted' && result.stage === 'defeated') await announceVictory(raid, player, result, reply)
+        else await reply(attackResponse({ ...result, maxHp: raid.max_hp }), result.status === 'accepted' ? { parse_mode: 'HTML' } : undefined)
       } finally {
         if (result.status === 'accepted' || result.status === 'expired') await updatePost(raid.id)
       }

@@ -112,7 +112,9 @@ test('rehearsal launches in the test topic, selects a MiniBeany privately and ch
   await f.groupMessage('/attack', { id: 30, at: 300_000 })
   await f.groupMessage('/attack', { player: 52, id: 31, at: 320_000, damageRoll: -10 })
   await f.groupMessage('/attack', { player: 53, id: 32, at: 360_000, damageRoll: 5 })
-  assert.equal(f.actions.at(-2).text, ['<b>MiniBeany #066 dealt 90 damage.</b>', '<i>Boss HP 0/600</i>', 'Beast defeated!', 'Congratulations to the hero.', '<i>All lumens are recorded.</i>'].join('\n'))
+  assert.match(f.actions.at(-2).text, /Victory for Polarim!/)
+  assert.match(f.actions.at(-2).text, /MiniBeany #066 dealt 90 damage/)
+  assert.match(f.actions.at(-2).text, /500 mock Lumens for Polarim/)
   assert.equal(f.actions.at(-1).media.media, 'defeated-photo')
   assert.ok(f.actions.at(-1).media.caption.includes('<i>Boss HP 0/600</i>\n' + '⬛'.repeat(10)))
   assert.match(f.actions.at(-1).media.caption, /500 mock Lumens for Polarim/)
@@ -541,4 +543,25 @@ test('live raids keep accepting hits after six, with a cooldown after the sixth 
   } finally {
     engine.close()
   }
+})
+
+test('victory photo replies to the boss and shows the fighter nickname and saved Tribe', async t => {
+  const f = setup(t)
+  const image = 'https://nft2-cdn.alchemy.com/bnb-mainnet/example'
+  f.evidence.victoryFighter = async (token, wallet) => {
+    assert.equal(token, '77')
+    assert.equal(wallet, walletOf('51'))
+    return { image, nickname: 'Ember & Ash' }
+  }
+  f.engine.launch({ id: 'victory', chat, topic, post: '20', closes: 3600000, openingBlock: '42',
+    hp: 20, beast: '8', lumens: 200, display: { name: 'Cindermaw', attacking: 'alive', wounded: 'alive', defeated: 'defeated' } })
+  await f.tap('victory')
+  const photo = f.actions.find(action => action.type === 'photo')
+  assert.equal(photo.media, image)
+  assert.equal(photo.options.message_thread_id, 41)
+  assert.deepEqual(photo.options.reply_parameters, { message_id: 20 })
+  assert.match(photo.options.caption, /Victory for Polarim!/)
+  assert.match(photo.options.caption, /Ember &amp; Ash/)
+  assert.match(photo.options.caption, /200 mock Lumens for Polarim/)
+  assert.equal(f.actions.at(-1).media.media, 'defeated')
 })
