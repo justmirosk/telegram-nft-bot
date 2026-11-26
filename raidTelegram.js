@@ -209,7 +209,7 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
         }
       }
       try {
-        await reply(attackResponse({ ...result, maxHp: raid.max_hp }))
+        await reply(attackResponse({ ...result, maxHp: raid.max_hp }), result.status)
       } finally {
         if (result.status === 'accepted' || result.status === 'expired') await updatePost(raid.id)
       }
@@ -241,7 +241,12 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     const raid = engine.latest(chat, topic)
     if (!raid || String(msg.message_id) !== raid.post) return answer('This boss post is no longer current.')
     try {
-      return await strike(raid, String(query.from.id), 'callback:' + query.id, answer)
+      return await strike(raid, String(query.from.id), 'callback:' + query.id, async (text, status) => {
+        if (status !== 'accepted') return answer(text)
+        // The group sees a successful hit even if Telegram has expired the callback.
+        await bot.answerCallbackQuery(query.id).catch(() => {})
+        return respond(msg, text)
+      })
     } catch (error) {
       onError('Raid button attack failed:', error?.name || 'Error')
       try { await answer(retryText) } catch { /* Telegram callback may have expired. */ }
