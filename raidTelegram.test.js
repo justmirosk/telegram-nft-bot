@@ -480,7 +480,9 @@ test('live raid locks the verified fighter and Tribe after the first hit', () =>
       openingBlock: '42', confirmedBlock: '43', tribe: 'polaris' }
     assert.equal(engine.attack({ ...attack, message: '1', evidence: proof }).status, 'accepted')
     assert.equal(engine.attack({ ...attack, message: '2' }).status, 'cooldown')
-    clock = 300000
+    clock = 119999
+    assert.equal(engine.attack({ ...attack, message: 'before-ready' }).status, 'cooldown')
+    clock = 120000
     const finish = engine.attack({ ...attack, message: '3' })
     assert.equal(finish.stage, 'defeated')
     assert.equal(finish.token, '77')

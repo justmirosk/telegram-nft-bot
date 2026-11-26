@@ -1,7 +1,7 @@
 const { randomInt } = require('node:crypto')
 const { DatabaseSync } = require('node:sqlite')
 
-const COOLDOWN_MS = 300_000
+const raidCooldownMs = live => live ? 120_000 : 300_000
 const MAX_HITS = 6
 const DAMAGE_ROLLS = [15, 25, 35, 55]
 
@@ -58,6 +58,7 @@ const schema = `
 `
 
 function openBossRaid(filename, { live = false, now = Date.now, roll = () => randomInt(-10, 11), pickDamage = () => DAMAGE_ROLLS[randomInt(DAMAGE_ROLLS.length)] } = {}) {
+  const cooldown = raidCooldownMs(live)
   const db = new DatabaseSync(filename)
   db.exec('PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;')
   db.exec(schema)
@@ -137,8 +138,8 @@ function openBossRaid(filename, { live = false, now = Date.now, roll = () => ran
       if (!entrant && db.prepare('SELECT 1 FROM raid_entrants WHERE raid = ? AND (wallet = ? OR token = ?)')
         .get(raid.id, wallet, token)) return record({ status: 'ineligible' })
       if (entrant?.hits >= MAX_HITS) return record({ status: 'cap' })
-      if (entrant && at < entrant.last_hit + COOLDOWN_MS) {
-        return record({ status: 'cooldown', nextAt: entrant.last_hit + COOLDOWN_MS })
+      if (entrant && at < entrant.last_hit + cooldown) {
+        return record({ status: 'cooldown', nextAt: entrant.last_hit + cooldown })
       }
       if (!entrant && tribe !== null && typeof tribe !== 'string') return { status: 'retry' }
 
@@ -175,7 +176,7 @@ function openBossRaid(filename, { live = false, now = Date.now, roll = () => ran
       }
       return record({
         status: 'accepted', participationAwarded, token, rolled, armor, damage, previousHp: raid.hp, hp, stage, hits,
-        nextAt: hp > 0 && hits < MAX_HITS ? at + COOLDOWN_MS : null,
+        nextAt: hp > 0 && hits < MAX_HITS ? at + cooldown : null,
         openingBlock: raid.opening_block, confirmedBlock,
       })
     })
@@ -240,4 +241,4 @@ function openBossRaid(filename, { live = false, now = Date.now, roll = () => ran
   }
 }
 
-module.exports = { openBossRaid }
+module.exports = { openBossRaid, raidCooldownMs }
