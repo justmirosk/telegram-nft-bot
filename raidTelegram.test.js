@@ -309,3 +309,35 @@ test('the Telegram and Web3 clients send the expected rehearsal requests over HT
   assert.equal(edit.get('0'), 'raid-defeated.png')
   assert.equal(engine.latest(chat, topic).state, 'defeated')
 })
+
+test('the shared bot reuses a production Telegram link and reads Tribe from Preview', async () => {
+  const wallet = walletOf('51')
+  const requests = []
+  const adapter = createRaidEvidence({
+    nftService: {
+      getFinalizedMiniBeanyBlock: async () => '45',
+      getHolderAtBlock: async () => wallet,
+    },
+    secret: 'preview-secret',
+    accountLookup: { url: 'https://www.beaniscrolls.com/api/connected-accounts/telegram', secret: 'production-secret' },
+    fetcher: async (url, options) => {
+      requests.push([url.origin, url.pathname, options.headers.Authorization])
+      return { ok: true, json: async () => url.pathname.endsWith('citizen')
+        ? { linked: true, wallet } : { representedTribe: null } }
+    },
+  })
+  assert.equal(adapter.usesSharedAccounts, true)
+  assert.equal(await adapter.linkedWallet('51'), wallet)
+  assert.equal((await adapter.verify('51', '77', '42', wallet, true)).tribe, null)
+  assert.deepEqual(requests, [
+    ['https://www.beaniscrolls.com', '/api/connected-accounts/telegram/citizen', 'Bearer production-secret'],
+    ['https://gems-testnet.beaniscrolls.site', '/api/represented-tribe', undefined],
+    ['https://www.beaniscrolls.com', '/api/connected-accounts/telegram/citizen', 'Bearer production-secret'],
+  ])
+})
+
+test('shared account credentials can only go to an allowlisted BeaniScrolls origin', () => {
+  assert.throws(() => createRaidEvidence({
+    accountLookup: { url: 'https://gems-testnet.beaniscrolls.site/api/connected-accounts/telegram', secret: 'production-secret' },
+  }), /Invalid shared BeaniScrolls account lookup/)
+})
