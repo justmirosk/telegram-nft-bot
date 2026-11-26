@@ -116,16 +116,18 @@ function openBossRaid(filename, { live = false, now = Date.now, roll = () => ran
         db.prepare("UPDATE raids SET state = 'expired' WHERE id = ?").run(raid.id)
         return record({ status: 'expired' })
       }
-      if (!evidence || evidence.openingBlock !== raid.opening_block) return { status: 'retry' }
+      const entrant = db.prepare('SELECT * FROM raid_entrants WHERE raid = ? AND player = ?').get(raid.id, player)
+      const locked = live && entrant
+      if (!locked && (!evidence || evidence.openingBlock !== raid.opening_block)) return { status: 'retry' }
 
-      const { token, tribe, openingOwner, confirmedOwner, confirmedBlock } = evidence
-      const wallet = evidence.wallet?.toLowerCase()
-      if (!wallet || openingOwner?.toLowerCase() !== wallet || confirmedOwner?.toLowerCase() !== wallet) {
+      const { token, tribe, openingOwner, confirmedOwner, confirmedBlock } = locked
+        ? { token: entrant.token, tribe: entrant.tribe, confirmedBlock: null }
+        : evidence
+      const wallet = locked ? entrant.wallet : evidence.wallet?.toLowerCase()
+      if (!locked && (!wallet || (!live && openingOwner?.toLowerCase() !== wallet) || confirmedOwner?.toLowerCase() !== wallet)) {
         return record({ status: 'ineligible' })
       }
-      if (typeof token !== 'string' || typeof confirmedBlock !== 'string') return { status: 'retry' }
-
-      const entrant = db.prepare('SELECT * FROM raid_entrants WHERE raid = ? AND player = ?').get(raid.id, player)
+      if (typeof token !== 'string' || (!locked && typeof confirmedBlock !== 'string')) return { status: 'retry' }
       if (entrant && (entrant.wallet !== wallet || entrant.token !== token)) return record({ status: 'ineligible' })
       if (!entrant && db.prepare('SELECT 1 FROM raid_entrants WHERE raid = ? AND (wallet = ? OR token = ?)')
         .get(raid.id, wallet, token)) return record({ status: 'ineligible' })

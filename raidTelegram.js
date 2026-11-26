@@ -252,9 +252,9 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
   handle(command(live ? 'raidmelive' : 'raidme'), inPrivate, async (msg, match, player) => {
     const raid = engine.latest(chat, topic)
     if (!raid || raid.state !== 'active') return respond(msg, 'There is no open rehearsal raid.')
-    const wallet = await evidence.linkedWallet(player)
-    if (!wallet) return respond(msg, linkHelp)
     const entrant = engine.entrant(raid.id, player)
+    const wallet = live && entrant ? entrant.wallet : await evidence.linkedWallet(player)
+    if (!wallet) return respond(msg, linkHelp)
     if (entrant) {
       if (entrant.wallet !== wallet) return respond(msg, attackResponse({ status: 'ineligible' }))
       const wait = Math.max(0, Math.ceil((entrant.last_hit + 300_000 - now()) / 1000))
