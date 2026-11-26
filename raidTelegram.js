@@ -227,8 +227,16 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
   })
 
   async function attackFromButton(query) {
-    const answer = text => bot.answerCallbackQuery(query.id, { text: text.slice(0, 200), show_alert: true })
     const msg = query.message
+    const answer = async text => {
+      try {
+        await bot.answerCallbackQuery(query.id, { text: text.slice(0, 200), show_alert: true })
+      } catch (error) {
+        // Chain and profile verification can outlive the callback acknowledgement window.
+        if (!msg || !inTopic(msg) || !/query is too old|query ID is invalid/i.test(error?.message || '')) throw error
+        await respond(msg, text)
+      }
+    }
     if (!msg || !inTopic(msg)) return answer('Open the boss post in the rehearsal topic.')
     const raid = engine.latest(chat, topic)
     if (!raid || String(msg.message_id) !== raid.post) return answer('This boss post is no longer current.')
