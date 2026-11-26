@@ -472,9 +472,18 @@ function register(bot, nftService, env = process.env, live = false) {
       })
   }
   if (!useProfile) return
-  if (live) startRewardDelivery(engine, env.PUBLISH_API_KEY)
+  if (live) {
+    startRewardDelivery(engine, env.PUBLISH_API_KEY)
+    Promise.all([bot.getMe(), bot.getChat(chat), evidence.openingBlock()]).then(async ([identity, group]) => {
+      const member = await bot.getChatMember(chat, identity.id)
+      if (String(group.id) !== chat || group.type !== 'supergroup' || !['administrator', 'member', 'creator'].includes(member.status)) {
+        throw new Error('Live raid group unavailable')
+      }
+      console.log('Boss Raid live preflight passed')
+    }).catch(error => console.error('Boss Raid live preflight failed:', error?.name || 'Error'))
+  }
   evidence.linkedWallet(admin).then(wallet => {
-    console.log('Boss Raid Preview account lookup ready:', Boolean(wallet) ? 'admin linked' : 'admin not linked')
+    console.log(live ? 'Boss Raid live account lookup ready:' : 'Boss Raid Preview account lookup ready:', Boolean(wallet) ? 'admin linked' : 'admin not linked')
   }).catch(error => {
     const status = /^BeaniScrolls lookup HTTP (\d{3})$/.exec(error?.message || '')?.[1]
     console.error('Boss Raid Preview account lookup unavailable:', status || error?.name || 'Error')
