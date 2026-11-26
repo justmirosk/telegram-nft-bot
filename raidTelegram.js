@@ -1,5 +1,7 @@
 const { randomUUID } = require('node:crypto')
-const { join } = require('node:path')
+const { dirname, join } = require('node:path')
+const { existsSync, mkdirSync, writeFileSync, renameSync } = require('node:fs')
+const { createImageUploads } = require('./imageUploads')
 const NFTService = require('./nftService')
 const { openBossRaid } = require('./bossRaid')
 const { createRaidEvidence } = require('./raidEvidence')
@@ -10,7 +12,31 @@ const command = name => new RegExp('^/' + name + '(?:@\\w+)?\\s*$', 'i')
 const retryText = 'Raid verification is temporarily unavailable. Please try again.'
 const tribeNames = { avira: 'Avarai', polaris: 'Polarim', binara: 'Binarai', solara: 'Solarim' }
 
+function retainUploadedArtwork(template, dbFile, publisherDir) {
+  const dir = join(dirname(dbFile), 'boss-raid-artwork')
+  const artwork = { ...template }
+  for (const stage of ['attacking', 'wounded', 'defeated']) {
+    const match = /^upload:([a-zA-Z0-9_-]{8,100})$/.exec(artwork[stage])
+    if (!match) continue
+    const id = match[1]
+    const file = join(dir, id + '.png')
+    if (!existsSync(file)) {
+      const image = createImageUploads(publisherDir).read(id)
+      if (!image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+        throw new Error('Raid artwork upload must be a PNG')
+      }
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
+      const temporary = join(dir, randomUUID() + '.tmp')
+      writeFileSync(temporary, image, { flag: 'wx', mode: 0o600 })
+      renameSync(temporary, file)
+    }
+    artwork[stage] = file
+  }
+  return artwork
+}
+
 function photoSource(photo, edit = false) {
+  if (photo.startsWith('/')) return edit ? 'attach://' + photo : photo
   const asset = /^asset:(attacking|wounded|defeated)$/.exec(photo)
   if (!asset) return photo
   const path = join(__dirname, 'assets', 'raid-' + asset[1] + '.png')
@@ -335,8 +361,9 @@ function register(bot, nftService, env = process.env) {
   const launchOnce = registerRaidCommands(bot, {
     engine: openBossRaid(filename),
     evidence,
-    settings: { chat, topic, admin, template },
+    settings: { chat, topic, admin, template: retainUploadedArtwork(template, filename, env.PUBLISH_STATE_DIR) },
   })
+  console.log('Boss Raid rehearsal configured:', JSON.stringify({ name: template.name, hp: template.hp }))
   if (launchId) {
     launchOnce(launchId).then(async result => {
       if (result.status === 'already-attempted') {
@@ -352,4 +379,4 @@ function register(bot, nftService, env = process.env) {
   }
 }
 
-module.exports = { register, registerRaidCommands }
+module.exports = { register, registerRaidCommands, retainUploadedArtwork }

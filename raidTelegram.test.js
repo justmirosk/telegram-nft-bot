@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const { test } = require('node:test')
 const { openBossRaid } = require('./bossRaid')
 const { createRaidEvidence } = require('./raidEvidence')
-const { register, registerRaidCommands } = require('./raidTelegram')
+const { register, registerRaidCommands, retainUploadedArtwork } = require('./raidTelegram')
 
 const chat = '-100123'
 const topic = '41'
@@ -340,4 +340,30 @@ test('shared account credentials can only go to an allowlisted BeaniScrolls orig
   assert.throws(() => createRaidEvidence({
     accountLookup: { url: 'https://gems-testnet.beaniscrolls.site/api/connected-accounts/telegram', secret: 'production-secret' },
   }), /Invalid shared BeaniScrolls account lookup/)
+})
+
+test('uploaded raid artwork is retained independently of staged files', t => {
+  const fs = require('node:fs')
+  const { tmpdir } = require('node:os')
+  const { join } = require('node:path')
+  const { createHash } = require('node:crypto')
+  const { createImageUploads } = require('./imageUploads')
+  const dir = fs.mkdtempSync(join(tmpdir(), 'raid-artwork-'))
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  const publisher = join(dir, 'publisher')
+  const image = fs.readFileSync(join(__dirname, 'assets', 'raid-attacking.png'))
+  const id = 'example-artwork'
+  createImageUploads(publisher).stage({
+    upload_id: id, chunk_index: 0, chunk_count: 1,
+    sha256: createHash('sha256').update(image).digest('hex'), chunk_base64: image.toString('base64'),
+  })
+  const ref = 'upload:' + id
+  const template = { attacking: ref, wounded: ref, defeated: ref }
+  const file = join(dir, 'raid.sqlite')
+  const retained = retainUploadedArtwork(template, file, publisher)
+  assert.equal(retained.attacking, retained.wounded)
+  assert.equal(retained.attacking, retained.defeated)
+  assert.deepEqual(fs.readFileSync(retained.attacking), image)
+  fs.rmSync(publisher, { recursive: true })
+  assert.deepEqual(retainUploadedArtwork(template, file, publisher), retained)
 })
