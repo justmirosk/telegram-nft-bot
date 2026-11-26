@@ -415,7 +415,7 @@ function register(bot, nftService, env = process.env) {
   const raidNftService = env.BOSS_RAID_BNB_RPC_URL
     ? new NFTService(env.BOSS_RAID_BNB_RPC_URL, useProfile ? env.BOSS_RAID_MINIBEANY_CONTRACT : nftService.contractAddress, useProfile ? BigInt(env.BOSS_RAID_BNB_CHAIN_ID) : 56n)
     : nftService
-  const accountLookup = env.BEANISCROLLS_TELEGRAM_LINK_URL && env.TELEGRAM_LINK_API_SECRET
+  const accountLookup = !useProfile && env.BEANISCROLLS_TELEGRAM_LINK_URL && env.TELEGRAM_LINK_API_SECRET
     ? { url: env.BEANISCROLLS_TELEGRAM_LINK_URL, secret: env.TELEGRAM_LINK_API_SECRET }
     : undefined
   const engine = openBossRaid(filename)
@@ -443,6 +443,12 @@ function register(bot, nftService, env = process.env) {
       })
   }
   if (!useProfile) return
+  evidence.linkedWallet(admin).then(wallet => {
+    console.log('Boss Raid Preview account lookup ready:', Boolean(wallet) ? 'admin linked' : 'admin not linked')
+  }).catch(error => {
+    const status = /^BeaniScrolls lookup HTTP (\d{3})$/.exec(error?.message || '')?.[1]
+    console.error('Boss Raid Preview account lookup unavailable:', status || error?.name || 'Error')
+  })
   return async function handleWebRequest(input, reply) {
     const { action, wallet, token } = input ?? {}
     if (action === 'read-selection' || action === 'save-selection') {
