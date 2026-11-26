@@ -49,7 +49,7 @@ if (process.env.BOSS_RAID_LIVE_ENABLED === 'true') {
       BOSS_RAID_BNB_RPC_URL: env.BOSS_RAID_LIVE_RPC_URL,
       BOSS_RAID_BNB_CHAIN_ID: '56',
       BOSS_RAID_MINIBEANY_CONTRACT: contractAddress,
-      BOSS_RAID_TEST_TEMPLATE: JSON.stringify({ name: 'Cindermaw', beast: '8', hp: Number(env.BOSS_RAID_LIVE_START_HP || 600), lumens: 200,
+      BOSS_RAID_TEST_TEMPLATE: JSON.stringify({ name: 'Cindermaw', beast: '8', hp: Number(env.BOSS_RAID_LIVE_START_HP || 1200), lumens: 200,
         durationMinutes: Number(env.BOSS_RAID_LIVE_DURATION_MINUTES || 60), attacking: 'asset:cindermaw-live', defeated: 'asset:cindermaw-defeated' }),
     }, true);
   } catch (error) {
