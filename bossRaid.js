@@ -137,7 +137,7 @@ function openBossRaid(filename, { live = false, now = Date.now, roll = () => ran
       if (entrant && (entrant.wallet !== wallet || entrant.token !== token)) return record({ status: 'ineligible' })
       if (!entrant && db.prepare('SELECT 1 FROM raid_entrants WHERE raid = ? AND (wallet = ? OR token = ?)')
         .get(raid.id, wallet, token)) return record({ status: 'ineligible' })
-      if (entrant?.hits >= MAX_HITS) return record({ status: 'cap' })
+      if (!live && entrant?.hits >= MAX_HITS) return record({ status: 'cap' })
       if (entrant && at < entrant.last_hit + cooldown) {
         return record({ status: 'cooldown', nextAt: entrant.last_hit + cooldown })
       }
@@ -176,7 +176,7 @@ function openBossRaid(filename, { live = false, now = Date.now, roll = () => ran
       }
       return record({
         status: 'accepted', participationAwarded, token, rolled, armor, damage, previousHp: raid.hp, hp, stage, hits,
-        nextAt: hp > 0 && hits < MAX_HITS ? at + cooldown : null,
+        nextAt: hp > 0 && (live || hits < MAX_HITS) ? at + cooldown : null,
         openingBlock: raid.opening_block, confirmedBlock,
       })
     })

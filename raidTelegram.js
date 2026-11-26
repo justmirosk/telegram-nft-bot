@@ -258,8 +258,8 @@ function registerRaidCommands(bot, { engine, evidence, settings, now = Date.now,
     if (entrant) {
       if (entrant.wallet !== wallet) return respond(msg, attackResponse({ status: 'ineligible' }))
       const wait = Math.max(0, Math.ceil((entrant.last_hit + raidCooldownMs(live) - now()) / 1000))
-      const timing = entrant.hits === 6 ? '' : wait ? ' ' + waitMessage(entrant.last_hit + raidCooldownMs(live)) : ' Attack ready.'
-      return respond(msg, `MiniBeany ${tokenNumber(entrant.token)} · ${entrant.hits}/6 hits used · ${engine.damageDealt(raid.id, player)} damage dealt.${timing}`)
+      const timing = !live && entrant.hits === 6 ? '' : wait ? ' ' + waitMessage(entrant.last_hit + raidCooldownMs(live)) : ' Attack ready.'
+      return respond(msg, `MiniBeany ${tokenNumber(entrant.token)} · ${entrant.hits}${live ? ' hits' : '/6 hits used'} · ${engine.damageDealt(raid.id, player)} damage dealt.${timing}`)
     }
     if (evidence.profileSelection) {
       const { token } = await evidence.profileSelection(wallet)
