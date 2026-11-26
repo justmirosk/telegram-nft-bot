@@ -47,7 +47,7 @@ function createRaidEvidence({ nftService, secret, accountLookup, profile, fetche
 
   return {
     profileSelection: profile && (async wallet => {
-      const data = await lookup('/api/boss-raid/profile', 'address', wallet, { Authorization: 'Bearer ' + profile.key })
+      const data = await lookup('/api/boss-raid/profile', 'address', wallet, { Authorization: 'Bearer ' + profile.key }, profile.live ? accountOrigin : PREVIEW_ORIGIN)
       if ((data.tribe !== null && !TRIBES.has(data.tribe))
         || !Array.isArray(data.eligible) || !data.eligible.every(token => typeof token === 'string' && /^(0|[1-9][0-9]?|100)$/.test(token))
         || data.chainId !== Number(nftService.chainId) || data.contract?.toLowerCase() !== nftService.contractAddress.toLowerCase()) {

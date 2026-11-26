@@ -382,9 +382,9 @@ test('attack button is scoped to the boss post and records one participation rew
   assert.equal(f.actions[0].options.reply_markup.inline_keyboard[0][0].text, '⚔️ Attack')
   await f.tap('other-post', 51, 21)
   assert.match(f.actions.at(-1).text, /no longer current/)
+  const feedbackCount = f.actions.length
   await f.tap('other-topic', 51, 20, 42)
-  assert.equal(f.actions.at(-1).type, 'callback')
-  assert.equal(f.actions.at(-1).options, undefined)
+  assert.equal(f.actions.length, feedbackCount)
   assert.equal(f.engine.getRaid(raid.id).hp, 600)
   await f.tap('first-hit')
   const hit = f.actions.find(action => action.type === 'message' && action.text.includes('dealt 100 damage'))
@@ -441,6 +441,27 @@ test('participation is credited only once across separate raids of the same Beas
     assert.equal(strike('relink', '8', '3', '100').participationAwarded, false)
     assert.equal(strike('different', '9', '4').participationAwarded, true)
     assert.equal(engine.prizes('first').find(prize => prize.kind === 'tribe-lumens').amount, 200)
+  } finally {
+    engine.close()
+  }
+})
+
+test('live final hit enqueues one participation credit and one winner credit', () => {
+  const engine = openBossRaid(':memory:', { live: true, now: () => 0, roll: () => 0 })
+  try {
+    const wallet = walletOf('51')
+    const evidence = { token: '77', openingBlock: '42', confirmedBlock: '43',
+      wallet, openingOwner: wallet, confirmedOwner: wallet, tribe: 'polaris' }
+    engine.launch({ id: 'live', chat, topic, post: '20', closes: 60000, openingBlock: '42', hp: 10, beast: '8', lumens: 200 })
+    const hit = { chat, topic, post: '20', message: '1', player: '51', evidence }
+    engine.attack(hit)
+    engine.attack(hit)
+    assert.deepEqual(engine.rewardBatch().map(row => [row.kind, row.wallet, row.tribe]), [
+      ['participation', wallet, null], ['winner', wallet, 'polaris'],
+    ])
+    assert.equal(engine.beastAwarded('8'), true)
+    engine.markRewardPaid(engine.rewardBatch()[0].id)
+    assert.deepEqual(engine.rewardBatch().map(row => row.kind), ['winner'])
   } finally {
     engine.close()
   }

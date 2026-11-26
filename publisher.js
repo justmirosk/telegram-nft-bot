@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { formatAnnouncement } = require('./announcementFormatting');
 
-function startPublisher(bot, env = process.env, handleRaid) {
+function startPublisher(bot, env = process.env, handleRaid, handleLiveRaid) {
   if (env.PUBLISH_ENABLED !== 'true') return null;
   const key = env.PUBLISH_API_KEY || '';
   const destinations = JSON.parse(env.PUBLISH_DESTINATIONS || '{}');
@@ -107,7 +107,8 @@ function startPublisher(bot, env = process.env, handleRaid) {
     if (req.url === '/mcp' && req.headers.origin &&
         !String(env.PUBLISH_ALLOWED_ORIGINS || '').split(',').includes(req.headers.origin)) return reply(403, { error: 'Origin not allowed' });
     if (req.url === '/mcp' && req.method !== 'POST') return handleMcp(req, res);
-    const raidRequest = req.url === '/boss-raid' && Boolean(handleRaid);
+    const raidHandler = req.url === '/boss-raid' ? handleRaid : req.url === '/boss-raid-live' ? handleLiveRaid : null;
+    const raidRequest = Boolean(raidHandler);
     if (req.method !== 'POST' || (!raidRequest && !['/publish', '/mcp'].includes(req.url))) return reply(404, { error: 'Not found' });
     if (!(req.headers['content-type'] || '').startsWith('application/json')) return reply(415, { error: 'Use application/json' });
     let bytes = 0;
@@ -121,7 +122,7 @@ function startPublisher(bot, env = process.env, handleRaid) {
       let input;
       try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
       catch { return reply(400, { error: 'Invalid JSON' }); }
-      if (raidRequest) return await handleRaid(input, reply);
+      if (raidRequest) return await raidHandler(input, reply);
       if (req.url === '/mcp') return await handleMcp(req, res, input);
       return await publish(input, reply);
     } catch {
