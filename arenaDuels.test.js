@@ -1,10 +1,10 @@
 const { test } = require('node:test');const assert = require('node:assert/strict');const fs = require('node:fs');const path = require('node:path');const os = require('node:os');
 const { registerArenaDuels, duelRequestKey } = require('./arenaDuels');
 const alice='0x1111111111111111111111111111111111111111',bob='0x2222222222222222222222222222222222222222';
-function setup({linkedWallet=async id=>id==='11'?alice:bob,response={status:'pending'},httpStatus=200}={}) {
+function setup({liveChatId,linkedWallet=async id=>id==='11'?alice:bob,response={status:'pending'},httpStatus=200}={}) {
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'bwduel-'));const calls=[],messages=[];let pattern;
  const bot={onText:(p)=>pattern=p,getMe:async()=>({username:'MiniBeanyBot'}),sendMessage:async(...args)=>messages.push(args)};
- const worker=registerArenaDuels(bot,{env:{PUBLISH_ENABLED:'true',PUBLISH_STATE_DIR:dir,PUBLISH_API_KEY:'k'.repeat(40),PUBLISH_DESTINATIONS:JSON.stringify({'beaniscrolls-test':{chat_id:'-123',message_thread_id:9}})},linkedWallet,fetcher:async(url,init)=>{calls.push({url,body:JSON.parse(init.body)});return Response.json(response,{status:httpStatus});}});
+ const worker=registerArenaDuels(bot,{env:{BOSS_RAID_LIVE_CHAT_ID:liveChatId,PUBLISH_ENABLED:'true',PUBLISH_STATE_DIR:dir,PUBLISH_API_KEY:'k'.repeat(40),PUBLISH_DESTINATIONS:JSON.stringify({'beaniscrolls-test':{chat_id:'-123',message_thread_id:9}})},linkedWallet,fetcher:async(url,init)=>{calls.push({url,body:JSON.parse(init.body)});return Response.json(response,{status:httpStatus});}});
  const msg={message_id:5,message_thread_id:9,chat:{id:-123,type:'supergroup'},from:{id:11},reply_to_message:{from:{id:22}}};
  return {msg,calls,messages,pattern,run:async(m=msg,mention)=>worker.handler(m,[null,mention]),close:()=>fs.rmSync(dir,{recursive:true})};
 }
@@ -14,3 +14,6 @@ for(const [name,change,text] of [['not a reply',{reply_to_message:undefined},/Re
 for(const who of ['11','22'])test('unlinked '+who+' never initiates',async()=>{const x=setup({linkedWallet:async id=>id===who?null:id==='11'?alice:bob});try{await x.run();assert.equal(x.calls.length,0);assert.match(x.messages[0][1],/link/i);assert.equal(x.messages[0][2].reply_markup.inline_keyboard[0][0].text,'🏟 Open Arena');}finally{x.close();}});
 test('missing Beast and fighter choice errors stay short and link Arena',async()=>{const x=setup({response:{error:'Choose your Telegram fighter in the Arena first.'},httpStatus:409});try{await x.run();assert.match(x.messages[0][1],/Telegram fighter/);}finally{x.close();}});
 test('automatic battles return saved replay button',async()=>{const id='ae84d9be-0000-4000-8000-000000000009';const x=setup({response:{status:'accepted',battleId:id}});try{await x.run();assert.equal(x.messages[0][2].reply_markup.inline_keyboard[0][0].url,'https://gems-testnet.beaniscrolls.site/sanctuary/arena?battle='+id);}finally{x.close();}});
+
+test('production group uses the live Arena and a separate retry namespace',async()=>{const x=setup({liveChatId:'-456'});try{const msg={...x.msg,chat:{id:-456,type:'supergroup'},message_thread_id:undefined};await x.run(msg);assert.equal(x.calls[0].url,'https://beaniscrolls.site/api/beast-arena/telegram-duel');assert.equal(x.messages[0][2].reply_markup.inline_keyboard[0][0].url,'https://beaniscrolls.site/sanctuary/arena');assert.equal(x.calls[0].body.requestKey,duelRequestKey(-456,5,'live'));assert.notEqual(duelRequestKey(-456,5,'live'),duelRequestKey(-456,5,'preview'));}finally{x.close();}});
+test('test topic stays Preview when it shares the live group',async()=>{const x=setup({liveChatId:'-123'});try{await x.run();assert.match(x.calls[0].url,/gems-testnet/);await x.run({...x.msg,message_id:6,message_thread_id:1});assert.equal(x.calls[1].url,'https://beaniscrolls.site/api/beast-arena/telegram-duel');}finally{x.close();}});
