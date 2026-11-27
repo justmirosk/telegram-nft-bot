@@ -283,3 +283,4 @@ process.on('unhandledRejection', (reason, promise) => {
 
 require('./arenaDelivery').startArenaDelivery(process.env);
 require('./arenaCallbacks').registerArenaCallbacks(bot);
+require('./arenaDuels').registerArenaDuels(bot);
