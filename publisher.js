@@ -8,6 +8,8 @@ function startPublisher(bot, env = process.env, handleRaid, handleLiveRaid) {
   if (env.PUBLISH_ENABLED !== 'true') return null;
   const key = env.PUBLISH_API_KEY || '';
   const destinations = JSON.parse(env.PUBLISH_DESTINATIONS || '{}');
+  // Arena announcements go to the configured BeaniWorld main group, outside raid topics.
+  if (/^-\d+$/.test(env.BOSS_RAID_LIVE_CHAT_ID || '')) destinations['beasts-arena-main'] = { chat_id: env.BOSS_RAID_LIVE_CHAT_ID };
   const dir = env.PUBLISH_STATE_DIR;
   if (key.length < 32 || !dir || !Object.keys(destinations).length) {
     throw new Error('Publisher requires a 32+ character key, destinations and persistent state directory');
