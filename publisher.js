@@ -40,7 +40,11 @@ function startPublisher(bot, env = process.env, handleRaid, handleLiveRaid) {
     return reply(400, { error: 'Invalid request, destination or text length' });
   }
   if (arena !== undefined && (!arena || typeof arena !== 'object' || Array.isArray(arena) || Object.keys(arena).some(k => !['id','environment'].includes(k)) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(arena.id) || !['preview','live'].includes(arena.environment) || destination !== (arena.environment === 'live' ? 'beasts-arena-main' : 'beaniscrolls-test') || !encoded || !id.startsWith('arena-'))) return reply(400, { error:'Invalid Arena challenge' });
-  const formatted = formatAnnouncement(text);
+  // Arena navigation belongs in the keyboard, keeping photo captions compact.
+  const arenaPost = id.startsWith('arena-') && ['beasts-arena-main', 'beaniscrolls-test'].includes(destination);
+  const arenaLink = arenaPost ? /\n(https:\/\/(?:gems-testnet\.beaniscrolls\.site|beaniscrolls\.site)\/sanctuary\/arena(?:\?[^\s]+)?)\s*$/.exec(text) : null;
+  const caption = arenaLink ? text.slice(0, arenaLink.index) : text;
+  const formatted = formatAnnouncement(caption);
   if (!formatted.plainText.trim() || [...formatted.plainText].length > (encoded ? 1024 : 4096)) {
     return reply(400, { error: 'Rendered text must contain content and fit the Telegram text or caption limit' });
   }
@@ -67,6 +71,10 @@ function startPublisher(bot, env = process.env, handleRaid, handleLiveRaid) {
   const target = destinations[destination];
   const options = target.message_thread_id ? { message_thread_id: target.message_thread_id } : {};
   if (arena) options.reply_markup = { inline_keyboard: [[{text:'⚔️ Accept battle',callback_data:`arena:${arena.environment === 'live' ? 'l' : 'p'}:a:${arena.id}`},{text:'✋ Refuse',callback_data:`arena:${arena.environment === 'live' ? 'l' : 'p'}:r:${arena.id}`}]] };
+  if (arenaLink) {
+    const button = { text: arena ? '🏟 Open Arena' : '▶️ Watch battle', url: arenaLink[1] };
+    options.reply_markup = { inline_keyboard: [...(options.reply_markup?.inline_keyboard || []), [button]] };
+  }
   console.info(JSON.stringify({ event: 'publish_started', request_id: id, destination, image_bytes: image?.length || 0 }));
   let sent;
   try {
@@ -84,7 +92,7 @@ function startPublisher(bot, env = process.env, handleRaid, handleLiveRaid) {
   fs.renameSync(temp, file);
   if (arena) {
     const index = path.join(dir, `arena-challenge-${arena.environment}-${arena.id}.json`);
-    fs.writeFileSync(index + '.tmp', JSON.stringify({ ...arena, chat_id:sent.chat.id, message_id:sent.message_id, text, status:'pending' }), {mode:0o600});
+    fs.writeFileSync(index + '.tmp', JSON.stringify({ ...arena, chat_id:sent.chat.id, message_id:sent.message_id, text:caption, status:'pending' }), {mode:0o600});
     fs.renameSync(index + '.tmp', index);
   }
   console.info(JSON.stringify({ event: 'publish_sent', request_id: id, message_id: receipt.message_id }));
