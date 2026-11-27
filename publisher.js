@@ -32,13 +32,14 @@ function startPublisher(bot, env = process.env, handleRaid, handleLiveRaid) {
       input = { ...rest, image_base64: uploads.read(image_upload_id).toString('base64') };
     } catch (error) { return reply(400, { error: error.message }); }
   }
-  const { request_id: id, destination, text, image_base64: encoded } = input;
+  const { request_id: id, destination, text, image_base64: encoded, arena_challenge: arena } = input;
   if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(id) ||
       typeof destination !== 'string' || !Object.hasOwn(destinations, destination) ||
       typeof text !== 'string' || !text.trim() ||
-      Object.keys(input).some(k => !['request_id', 'destination', 'text', 'image_base64'].includes(k))) {
+      Object.keys(input).some(k => !['request_id', 'destination', 'text', 'image_base64', 'arena_challenge'].includes(k))) {
     return reply(400, { error: 'Invalid request, destination or text length' });
   }
+  if (arena !== undefined && (!arena || typeof arena !== 'object' || Array.isArray(arena) || Object.keys(arena).some(k => !['id','environment'].includes(k)) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(arena.id) || !['preview','live'].includes(arena.environment) || destination !== (arena.environment === 'live' ? 'beasts-arena-main' : 'beaniscrolls-test') || !encoded || !id.startsWith('arena-'))) return reply(400, { error:'Invalid Arena challenge' });
   const formatted = formatAnnouncement(text);
   if (!formatted.plainText.trim() || [...formatted.plainText].length > (encoded ? 1024 : 4096)) {
     return reply(400, { error: 'Rendered text must contain content and fit the Telegram text or caption limit' });
@@ -52,7 +53,7 @@ function startPublisher(bot, env = process.env, handleRaid, handleLiveRaid) {
     if (!mime || image.length > 5 * 1024 * 1024) return reply(400, { error: 'Use PNG or JPEG up to 5 MiB' });
   }
   const file = path.join(dir, `${id}.json`);
-  const hash = crypto.createHash('sha256').update(JSON.stringify({ request_id: id, destination, text, ...(encoded !== undefined ? { image_base64: encoded } : {}) })).digest('hex');
+  const hash = crypto.createHash('sha256').update(JSON.stringify({ request_id: id, destination, text, ...(encoded !== undefined ? { image_base64: encoded } : {}), ...(arena ? { arena_challenge: arena } : {}) })).digest('hex');
   try {
     const fd = fs.openSync(file, 'wx', 0o600);
     try { fs.writeFileSync(fd, JSON.stringify({ hash, status: 'pending' })); fs.fsyncSync(fd); }
@@ -65,6 +66,7 @@ function startPublisher(bot, env = process.env, handleRaid, handleLiveRaid) {
   }
   const target = destinations[destination];
   const options = target.message_thread_id ? { message_thread_id: target.message_thread_id } : {};
+  if (arena) options.reply_markup = { inline_keyboard: [[{text:'⚔️ Accept battle',callback_data:`arena:${arena.environment === 'live' ? 'l' : 'p'}:a:${arena.id}`},{text:'✋ Refuse',callback_data:`arena:${arena.environment === 'live' ? 'l' : 'p'}:r:${arena.id}`}]] };
   console.info(JSON.stringify({ event: 'publish_started', request_id: id, destination, image_bytes: image?.length || 0 }));
   let sent;
   try {
@@ -80,6 +82,11 @@ function startPublisher(bot, env = process.env, handleRaid, handleLiveRaid) {
   const temp = `${file}.tmp`;
   fs.writeFileSync(temp, JSON.stringify(receipt), { mode: 0o600 });
   fs.renameSync(temp, file);
+  if (arena) {
+    const index = path.join(dir, `arena-challenge-${arena.environment}-${arena.id}.json`);
+    fs.writeFileSync(index + '.tmp', JSON.stringify({ ...arena, chat_id:sent.chat.id, message_id:sent.message_id, text, status:'pending' }), {mode:0o600});
+    fs.renameSync(index + '.tmp', index);
+  }
   console.info(JSON.stringify({ event: 'publish_sent', request_id: id, message_id: receipt.message_id }));
   return reply(200, receipt);
   };
