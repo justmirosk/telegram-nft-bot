@@ -1,5 +1,5 @@
 const { DatabaseSync } = require('node:sqlite')
-const LEADS = [1,2,3,4,6,8,12,24,48]
+const LEADS = [1/12,1,2,3,4,6,8,12,24,48]
 function openRaidSchedule(filename, { now = Date.now } = {}) {
   const db = new DatabaseSync(filename)
   db.exec("PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS raid_schedule (id TEXT PRIMARY KEY, template TEXT NOT NULL, starts INTEGER NOT NULL, announces INTEGER, announcement TEXT NOT NULL DEFAULT 'pending', launch TEXT NOT NULL DEFAULT 'pending', cancelled INTEGER NOT NULL DEFAULT 0, error TEXT) STRICT")
