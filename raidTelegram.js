@@ -4,6 +4,7 @@ const { existsSync, mkdirSync, writeFileSync, renameSync } = require('node:fs')
 const { CHUNK_SIZE, createImageUploads } = require('./imageUploads')
 const NFTService = require('./nftService')
 const { openBossRaid, raidCooldownMs } = require('./bossRaid')
+const { openRaidSchedule } = require('./raidSchedule')
 const { createRaidEvidence } = require('./raidEvidence')
 
 const tokenNumber = token => '#' + String(Number(token) + 1).padStart(3, '0')
@@ -515,6 +516,39 @@ function register(bot, nftService, env = process.env, live = false) {
     const status = /^BeaniScrolls lookup HTTP (\d{3})$/.exec(error?.message || '')?.[1]
     console.error('Boss Raid Preview account lookup unavailable:', status || error?.name || 'Error')
   })
+  // Preview only until scheduling has passed rehearsal tests.
+  const schedule = !live ? openRaidSchedule(filename) : null
+  if (schedule) {
+    schedule.recover()
+    let dispatching = false
+    const tick = async () => {
+      if (dispatching) return
+      dispatching = true
+      try {
+        for (const job of schedule.list()) {
+          if (job.cancelled) continue
+          const draft = JSON.parse(job.template)
+          if (schedule.claim(job.id, 'announcement')) {
+            try {
+              await bot.sendPhoto(chat, photoSource(draft.attacking), {
+                ...(topic ? { message_thread_id: Number(topic) } : {}),
+                caption: ['UPCOMING BOSS RAID — REHEARSAL', draft.name, 'Starts: '+new Date(job.starts).toISOString(), 'HP: '+draft.hp, 'Duration: '+draft.durationMinutes+' minutes', 'Mock prizes only'].join('\n')
+              })
+              schedule.finish(job.id, 'announcement', true)
+            } catch { schedule.finish(job.id, 'announcement', false) }
+          }
+          if (engine.latest(chat, topic)?.state === 'active') continue
+          if (schedule.claim(job.id, 'launch')) {
+            try {
+              const result = await launchOnce('scheduled-'+job.id, draft)
+              schedule.finish(job.id, 'launch', result.status === 'posted')
+            } catch { schedule.finish(job.id, 'launch', false) }
+          }
+        }
+      } finally { dispatching = false }
+    }
+    setInterval(() => void tick().catch(error => console.error('Raid scheduler:', error.name)), 15000).unref()
+  }
   return async function handleWebRequest(input, reply) {
     const { action, wallet, token } = input ?? {}
     if (action === 'read-selection' || action === 'save-selection') {
@@ -553,7 +587,9 @@ function register(bot, nftService, env = process.env, live = false) {
       const winnerWallet = raid?.state === 'defeated' ? engine.prizes(raid.id).find(prize => prize.kind === 'beast')?.recipient : undefined
       return reply(200, { status: raid?.state ?? 'none', post: raid?.post, winnerWallet })
     }
-    if (action !== 'launch') return reply(400, { error: 'Invalid raid action.' })
+    if (schedule && action === 'list-scheduled') return reply(200, { jobs: schedule.list().map(({template,...job}) => ({...job, name: JSON.parse(template).name, beast: JSON.parse(template).beast})) })
+    if (schedule && action === 'cancel-scheduled') return reply(schedule.cancel(input.id) ? 200 : 409, { status: 'cancel-requested' })
+    if (action !== 'launch' && !(schedule && action === 'schedule')) return reply(400, { error: 'Invalid raid action.' })
     const { id, name, beast, hp, durationMinutes, live, defeated } = input
     const stage = (value, fallback) => value === undefined ? fallback
       : typeof value === 'string' && /^[a-zA-Z0-9_-]{8,100}$/.test(value) ? 'upload:' + value : null
@@ -573,6 +609,12 @@ function register(bot, nftService, env = process.env, live = false) {
         attacking, wounded: attacking, defeated: ending }, filename, env.PUBLISH_STATE_DIR)
     } catch {
       return reply(400, { error: 'Both artwork uploads must be available PNG files.' })
+    }
+    if (action === 'schedule') {
+      try {
+        const job = schedule.save(id, artwork, input.starts, input.announcementHours ?? null)
+        return reply(200, { status: 'scheduled', id: job.id, starts: job.starts, announces: job.announces })
+      } catch { return reply(400, { error: 'Invalid or duplicate schedule.' }) }
     }
     const result = await launchOnce('web-' + id, artwork)
     return reply(result.status === 'posted' ? 200 : 409, result)
